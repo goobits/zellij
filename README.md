@@ -1,145 +1,99 @@
-# 🧭 Zellij Workspaces
+# 🧭 goob: Zellij Workspaces
 
-Reusable, profile-based Zellij workspace tooling. The scripts in this directory
-are generic; project-specific profiles live outside this directory, such as
-`config/zellij/` in the parent workspace.
+Reusable, zero-friction Zellij workspace tooling.
+
+`goob` provides sane defaults for managing complex terminal environments. It lets
+you define project layouts in plain text, then handles session management,
+auto-linking, and layout generation for you.
+
+The goal: **Clone a repo, type `goob`, and get to work.**
 
 ## 🚀 Getting Started
 
-### 🛠️ Install Tooling
+### 1. Global Install
 
-From this directory:
-
-```bash
-goob install
-```
-
-This installs the shared Zellij helpers and shell integration.
-
-If `goob` is not installed yet, run the source installer once:
+Install the shared tooling once. From this repository directory, run:
 
 ```bash
 ./install.sh
 ```
 
-### 📦 Create Repo Config
+If `zellij` is missing, this downloads pinned Zellij `0.44.3` for your
+architecture. Set `ZELLIJ_INSTALL_BINARY=0` to skip binary installation.
 
-Create `config/zellij/profile.conf` and `config/zellij/main.tabs` with sane
-defaults:
+### 2. Scaffold A Project
+
+In any project directory, use `goob init` to generate a default Zellij profile at
+`config/zellij/`.
 
 ```bash
+# Sane defaults: one workspace named main with app, server, infra, scratch
 goob init
-```
 
-Create one workspace with custom tabs:
-
-```bash
+# Custom tabs for one workspace
 goob init app server infra docs
-```
 
-Create multiple workspaces:
-
-```bash
+# Multiple workspaces
 goob init frontend=app,ui,tools backend=infra,api,db
-```
 
-Overwrite existing generated config:
-
-```bash
+# Overwrite existing config/zellij safely
 goob init --force frontend=app,ui backend=infra,api
 ```
 
-### ▶️ Open A Workspace
+### 3. Daily Usage
 
-Open the default workspace. If `./config/zellij` exists, `goob` installs or
-refreshes it automatically before opening Zellij:
+When a project has `config/zellij/`, `goob` auto-detects it. You do not need to
+manually link or install profiles for normal repos.
 
 ```bash
+# Open the default workspace
 goob
-```
 
-Open a named workspace:
+# Open a specific workspace
+goob frontend
 
-```bash
-goob default
-```
+# Open a workspace in a named session
+goob frontend -s sketch-api
 
-Open a named session or override the root directory:
-
-```bash
-goob frontend -s sketch-api-2
+# Open a workspace with a different root directory
 goob frontend -r /custom/workspace/path
-goob frontend -s sketch-api-2 -r /custom/workspace/path
+
+# Combine flags; order does not matter
+goob frontend -s sketch-api -r /custom/workspace/path
 ```
 
-List available workspaces:
+### 4. Visibility And Management
 
 ```bash
-goob ls
+goob ls           # List available workspaces in the current project
+goob ps           # List running Zellij sessions
+goob kill <name>  # Kill a specific session
+goob doctor       # Validate the install and current profile config
 ```
 
-### ✅ Check Setup
+## 📁 How Profiles Work
 
-Validate the install and profile:
-
-```bash
-goob doctor
-```
-
-## 🧰 Commands
-
-### Friend-Facing Commands
-
-```bash
-goob install                           # Install shared tooling
-goob init                              # Create config/zellij with defaults
-goob init app server infra docs        # Create main.tabs with custom tabs
-goob init frontend=app backend=api,db  # Create multiple workspaces
-goob setup --config /path/to/profile   # Install/link a profile explicitly
-goob doctor                            # Check install and current profile
-goob ls                                # List workspaces
-goob ps                                # List running Zellij sessions
-goob kill <session>                    # Kill a running session
-goob                                   # Open default workspace
-goob <workspace>                       # Open a workspace
-goob <workspace> -s <session>          # Open named session
-goob <workspace> -r <root>             # Override root directory
-```
-
-### Lower-Level Commands
-
-```bash
-zwork <profile> <workspace> [session] [workdir]
-zellij-workspace-init --config /path/to/profile
-zellij-workspace-doctor --config /path/to/profile
-```
-
-Prefer `goob` for normal use. The lower-level commands are kept for scripting,
-debugging, and reuse outside this repo.
-
-## 📁 Profiles
-
-A profile is a directory with inert config data and tab lists. In normal repos,
-this lives at `config/zellij/`:
+A profile is a directory of inert config data that `goob` reads to build your
+environment.
 
 ```text
-config/zellij/
+my-project/config/zellij/
   profile.conf
   frontend.tabs
   backend.tabs
 ```
 
-`profile.conf` supports:
+`profile.conf` sets project defaults:
 
 ```text
-name=my-site
+name=my-project
 root=/workspace
 default_workspace=frontend
 default_workspaces=frontend backend
 ```
 
-Tab files define workspace layout. Each line is a tab name. A tab may also set a
-working directory using a tab-separated second column:
+`*.tabs` files define workspace layouts. Each line is a tab name. You can
+optionally set a tab working directory with a tab-separated second column:
 
 ```text
 app
@@ -147,8 +101,8 @@ server	/workspace/server
 scratch
 ```
 
-`goob <workspace>` works for any installed `<workspace>.tabs` file, so
-`frontend` and `backend` are only defaults, not special cases.
+`goob <workspace>` works for any `<workspace>.tabs` file. Workspace names such
+as `frontend` and `backend` are conventions, not special cases.
 
 `goob init` defaults to:
 
@@ -168,62 +122,23 @@ infra
 scratch
 ```
 
-## 🧩 What It Installs
+## ✨ Quality Of Life Features
 
-- `~/.config/zellij/config.kdl`
-- `~/.local/bin/goob`
-- `~/.local/bin/zwork`
-- `~/.local/bin/zellij-launch-session`
-- `~/.local/bin/zellij-open-session`
-- `~/.local/bin/zellij-render-layout`
-- `~/.local/bin/zellij-saved-session-order`
-- `~/.local/bin/zellij-live-tab-order`
-- `~/.local/bin/zellij-session-tab-order`
-- `~/.local/bin/zellij-workspace-init`
-- `~/.local/bin/zellij-workspace-doctor`
-- `~/.local/bin/.zellij-agent-tab-watcher`
-- a marked shell block in `~/.zshrc` and `~/.bashrc`
+### 🤖 Agent Tab Status
 
-If `zellij` is missing, the installer downloads pinned Zellij `0.44.3` for
-Linux/macOS arm64 or x86_64. Set `ZELLIJ_INSTALL_BINARY=0` to skip binary
-installation.
+`goob` includes a hidden watcher that marks tabs while background agents or
+scripts are working:
 
-## 🖥️ Sessions
+- `🤖` means an agent or script is actively working.
+- `🔔` means work finished on a background tab; it disappears when you view the
+  tab.
 
-Existing sessions are preserved. When a session is resumed, the launcher moves
-known tabs back into profile order and saves the corrected session. Extra ad-hoc
-tabs stay after the profile tabs.
-
-When run from inside an existing Zellij client, `goob` switches sessions in
-place instead of nesting a second Zellij client.
-
-Serialized sessions restore panes as shells instead of foreground apps. This
-keeps tabs alive when `Ctrl+C` exits tools such as Codex.
-
-## 🤖 Agent Tab Status
-
-The hidden watcher marks tabs with `🤖` while an agent pane reports active work.
-When work finishes on a background tab, it switches to `🔔` until that tab is
-viewed.
-
-Debug watcher status:
-
-```bash
-ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --status
-ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --log 40
-ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --watcher-log 40
-```
-
-Clear stale markers:
-
-```bash
-ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --reset
-```
-
-Restart the watcher:
+Reset or inspect the watcher for a session:
 
 ```bash
 ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --restart
+ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --status
+ZELLIJ_SESSION_NAME=frontend ~/.local/bin/.zellij-agent-tab-watcher --log 40
 ```
 
 Tune polling:
@@ -232,28 +147,57 @@ Tune polling:
 ZELLIJ_AGENT_TAB_WATCHER_POLL_SECONDS=0.5 goob frontend
 ```
 
-## 🍎 macOS Notes
+### 🧠 Smart Session Resumption
 
-For Mac-like editing, let the terminal app keep standard Command shortcuts such
-as Command+C, Command+V, Command+L, and Command+Left/Right. Configure Option as
+Existing sessions are preserved. When you resume a session, `goob` moves core
+profile tabs back into their configured order. Extra ad-hoc tabs stay at the
+end.
+
+If you run `goob` from inside an existing Zellij client, it switches sessions in
+place instead of nesting a second client.
+
+Serialized sessions restore panes as shells instead of foreground apps. This
+keeps tabs alive when `Ctrl+C` exits tools such as Codex.
+
+### 🍎 macOS Notes And Keybinds
+
+For Mac-like editing, let your terminal app handle standard shortcuts such as
+Command+C, Command+V, Command+L, and Command+Left/Right. Configure Option as
 Meta/Esc so Option+Left/Right reaches the shell for word movement.
 
-The config also maps common Mac delete behavior:
+The config maps standard Mac delete behaviors:
 
-- `Alt Backspace`: delete previous word
-- `Super Backspace`: delete current line
+- `Alt + Backspace`: Delete previous word
+- `Super + Backspace`: Delete current line
 
 Text selection does not copy automatically. Use `Super c`, `Alt c`, or `Ctrl y`
 to copy the active Zellij selection.
-
-## 🔗 Links And Mouse
 
 The config keeps mouse wheel scrolling enabled, disables Ctrl-wheel pane
 resizing, and uses focus-follows-mouse so the pane under the pointer receives
 scroll focus.
 
-Links are easiest to open with the terminal's modified-click gesture, usually
-`Shift`+click or Command-click depending on the terminal.
+## 🧰 Under The Hood
+
+`goob` installs helper commands into `~/.local/bin/`. You usually do not need to
+touch these directly, but they are available for scripting:
+
+- `goob`
+- `zwork <profile> <workspace> [session] [workdir]`
+- `zellij-workspace-init`
+- `zellij-workspace-doctor`
+- `zellij-launch-session`
+- `zellij-open-session`
+- `zellij-render-layout`
+- `zellij-saved-session-order`
+- `zellij-live-tab-order`
+- `zellij-session-tab-order`
+- `.zellij-agent-tab-watcher`
+
+It also installs:
+
+- `~/.config/zellij/config.kdl`
+- a marked shell block in `~/.zshrc` and `~/.bashrc`
 
 ## ✅ Maintenance Checks
 
