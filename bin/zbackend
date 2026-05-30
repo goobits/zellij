@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+session="${1:-backend}"
+workdir="${ZELLIJ_BACKEND_DIR:-${ZELLIJ_SKETCH_DIR:-/workspace}}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+exec "$script_dir/zwork" sketch-api backend "$session" "$workdir"

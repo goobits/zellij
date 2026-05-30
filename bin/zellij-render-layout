@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tabs_file="${1:-}"
+workdir="${2:-}"
+
+if [[ -z "$tabs_file" || -z "$workdir" ]]; then
+  printf 'usage: zellij-render-layout <tabs-file> <workdir>\n' >&2
+  exit 2
+fi
+
+if [[ ! -f "$tabs_file" ]]; then
+  printf 'zellij-render-layout: missing tabs file %s\n' "$tabs_file" >&2
+  exit 1
+fi
+
+escape_kdl_string() {
+  local value="${1:-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
+}
+
+printf 'layout {\n'
+printf '    cwd "%s"\n\n' "$(escape_kdl_string "$workdir")"
+cat <<'EOF'
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:tab-bar"
+        }
+        children
+    }
+
+EOF
+
+first_tab=1
+while IFS= read -r tab_name || [[ -n "$tab_name" ]]; do
+  [[ -n "$tab_name" ]] || continue
+  if (( first_tab == 1 )); then
+    printf '    tab name="%s" focus=true {\n' "$(escape_kdl_string "$tab_name")"
+    first_tab=0
+  else
+    printf '    tab name="%s" {\n' "$(escape_kdl_string "$tab_name")"
+  fi
+  printf '        pane\n'
+  printf '    }\n\n'
+done < "$tabs_file"
+
+printf '}\n'

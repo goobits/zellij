@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+layout_file="${1:-}"
+session="${2:-}"
+workdir="${3:-}"
+shift 3 || true
+
+if [[ -z "$layout_file" || -z "$session" || -z "$workdir" || "$#" -eq 0 ]]; then
+  printf 'usage: zellij-launch-session <layout-file> <session> <workdir> <tab-name>...\n' >&2
+  exit 2
+fi
+
+if [[ ! "$session" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+  printf 'zellij-launch-session: session names may only use letters, numbers, dot, underscore, and dash\n' >&2
+  exit 2
+fi
+
+if [[ ! -f "$layout_file" ]]; then
+  printf 'zellij-launch-session: missing layout file %s\n' "$layout_file" >&2
+  exit 1
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+tab_order_helper="$script_dir/zellij-session-tab-order"
+
+if [[ -d "$workdir" ]]; then
+  cd "$workdir"
+fi
+
+if [[ -x "$tab_order_helper" ]]; then
+  ZELLIJ_SESSION_TAB_ORDER_CANONICAL=1 ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 "$tab_order_helper" "$session" "$@"
+fi
+
+if [[ -x "$HOME/.local/bin/.zellij-agent-tab-watcher" ]]; then
+  ZELLIJ=1 ZELLIJ_SESSION_NAME="$session" "$HOME/.local/bin/.zellij-agent-tab-watcher" --start
+fi
+
+if [[ -n "${ZELLIJ:-}" ]]; then
+  exec zellij action switch-session --layout "$layout_file" --cwd "$workdir" "$session"
+fi
+
+if zellij list-sessions --short --no-formatting 2>/dev/null | grep -Fx "$session" >/dev/null; then
+  exec zellij attach --force-run-commands "$session"
+fi
+
+exec zellij --layout "$layout_file" attach --force-run-commands "$session" --create
