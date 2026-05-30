@@ -92,6 +92,9 @@ install_files() {
     zellij-open-session
     zellij-render-layout
     zwork
+    goob
+    zellij-workspace-init
+    zellij-workspace-doctor
     zellij-agent-tab-watcher
   )
 

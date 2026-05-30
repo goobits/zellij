@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command_name="${1:-}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  cat <<'EOF' >&2
+usage:
+  goob
+  goob setup [--config <profile-dir>]
+  goob doctor [--config <profile-dir>]
+  goob list [--config <profile-dir>]
+  goob <workspace> [session] [workdir]
+EOF
+}
+
+find_config_dir() {
+  local candidate
+
+  if [[ -n "${GOOB_CONFIG_DIR:-}" ]]; then
+    candidate="$GOOB_CONFIG_DIR"
+    if [[ -d "$candidate" ]]; then
+      cd "$candidate"
+      pwd
+      return
+    fi
+  fi
+
+  candidate="$PWD/config/zellij"
+  if [[ -f "$candidate/profile.conf" ]]; then
+    cd "$candidate"
+    pwd
+    return
+  fi
+
+  return 1
+}
+
+profile_value() {
+  local config_file="$1" key="$2" default_value="${3:-}"
+  if [[ ! -f "$config_file" ]]; then
+    printf '%s' "$default_value"
+    return
+  fi
+
+  awk -F '=' -v key="$key" -v default_value="$default_value" '
+    $1 == key {
+      value = substr($0, length(key) + 2)
+      gsub(/\r$/, "", value)
+      print value
+      found = 1
+      exit
+    }
+    END {
+      if (!found) print default_value
+    }
+  ' "$config_file"
+}
+
+resolve_profile_name() {
+  local config_dir="${1:-}" default_file="$HOME/.local/share/zellij-workspaces/default-profile"
+
+  if [[ -n "$config_dir" && -f "$config_dir/profile.conf" ]]; then
+    profile_value "$config_dir/profile.conf" name "$(basename "$config_dir")"
+    return
+  fi
+
+  if [[ -f "$default_file" ]]; then
+    sed -n '1p' "$default_file"
+    return
+  fi
+
+  printf 'zellij'
+}
+
+resolve_config_arg() {
+  local config_dir=""
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --config)
+        config_dir="${2:-}"
+        shift 2
+        ;;
+      *)
+        printf 'goob: unknown argument %s\n' "$1" >&2
+        usage
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$config_dir" ]]; then
+    if config_dir="$(find_config_dir)"; then
+      :
+    else
+      printf 'goob: could not find config/zellij; pass --config <profile-dir>\n' >&2
+      exit 1
+    fi
+  fi
+
+  cd "$config_dir"
+  pwd
+}
+
+case "$command_name" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  "")
+    config_dir=""
+    if config_dir="$(find_config_dir)"; then
+      workspace="$(profile_value "$config_dir/profile.conf" default_workspace "")"
+      profile_name="$(resolve_profile_name "$config_dir")"
+    else
+      profile_name="$(resolve_profile_name "")"
+      profile_dir="$HOME/.local/share/zellij-workspaces/profiles/$profile_name"
+      workspace="$(profile_value "$profile_dir/profile.conf" default_workspace "")"
+    fi
+
+    if [[ -z "$workspace" ]]; then
+      usage
+      exit 2
+    fi
+
+    exec "$script_dir/zwork" "$profile_name" "$workspace"
+    ;;
+  setup)
+    shift
+    config_dir="$(resolve_config_arg "$@")"
+    exec "$script_dir/zellij-workspace-init" --config "$config_dir"
+    ;;
+  doctor | check)
+    shift
+    config_dir="$(resolve_config_arg "$@")"
+    exec "$script_dir/zellij-workspace-doctor" --config "$config_dir"
+    ;;
+  list)
+    shift
+    if [[ "$#" -gt 0 ]]; then
+      config_dir="$(resolve_config_arg "$@")"
+      shopt -s nullglob
+      tabs_files=("$config_dir"/*.tabs)
+      shopt -u nullglob
+    elif config_dir="$(find_config_dir)"; then
+      shopt -s nullglob
+      tabs_files=("$config_dir"/*.tabs)
+      shopt -u nullglob
+    else
+      profile_name="$(resolve_profile_name "")"
+      profile_dir="$HOME/.local/share/zellij-workspaces/profiles/$profile_name"
+      shopt -s nullglob
+      tabs_files=("$profile_dir"/*.tabs)
+      shopt -u nullglob
+    fi
+
+    for tabs_file in "${tabs_files[@]:-}"; do
+      basename "$tabs_file" .tabs
+    done
+    ;;
+  *)
+    workspace="$command_name"
+    shift
+    config_dir=""
+    if config_dir="$(find_config_dir)"; then
+      profile_name="$(resolve_profile_name "$config_dir")"
+    else
+      profile_name="$(resolve_profile_name "")"
+    fi
+
+    exec "$script_dir/zwork" "$profile_name" "$workspace" "$@"
+    ;;
+esac

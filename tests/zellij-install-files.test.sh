@@ -23,6 +23,9 @@ for executable in \
   zellij-open-session \
   zellij-render-layout \
   zwork \
+  goob \
+  zellij-workspace-init \
+  zellij-workspace-doctor \
   .zellij-agent-tab-watcher
 do
   if [[ ! -x "$tmp/home/.local/bin/$executable" ]]; then

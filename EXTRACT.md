@@ -13,6 +13,9 @@ zellij-workspaces/
     zellij-session-tab-order
     zellij-live-tab-order
     zellij-saved-session-order
+    goob
+    zellij-workspace-init
+    zellij-workspace-doctor
   examples/
     basic-website/
   tests/

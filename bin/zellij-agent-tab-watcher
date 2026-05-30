@@ -33,8 +33,13 @@ tab_base_name() {
 
 is_busy_title() {
   local pane_title="${1:-}"
+  local first_char="${pane_title:0:1}"
 
-  [[ "$pane_title" =~ ^[⠁-⣿] ]] && return 0
+  case "$first_char" in
+    ⠋ | ⠙ | ⠹ | ⠸ | ⠼ | ⠴ | ⠦ | ⠧ | ⠇ | ⠏)
+      return 0
+      ;;
+  esac
   [[ "$pane_title" == "✦"* ]] && return 0
   return 1
 }
