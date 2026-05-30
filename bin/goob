@@ -3,38 +3,30 @@ set -euo pipefail
 
 command_name="${1:-}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+default_tabs=(app server infra scratch)
 
 usage() {
   cat <<'EOF' >&2
 usage:
   goob
-  goob setup [--config <profile-dir>]
+  goob install
+  goob init [--force] [--name <profile>] [--root <path>] [<tab>...]
+  goob init [--force] [--name <profile>] [--root <path>] <workspace>=<tab>,...
+  goob setup --config <profile-dir>
   goob doctor [--config <profile-dir>]
-  goob list [--config <profile-dir>]
-  goob <workspace> [session] [workdir]
+  goob ls [--config <profile-dir>]
+  goob ps
+  goob kill <session>
+  goob <workspace> [-s <session>] [-r <root>]
 EOF
 }
 
-find_config_dir() {
-  local candidate
-
-  if [[ -n "${GOOB_CONFIG_DIR:-}" ]]; then
-    candidate="$GOOB_CONFIG_DIR"
-    if [[ -d "$candidate" ]]; then
-      cd "$candidate"
-      pwd
-      return
-    fi
+validate_name() {
+  local kind="$1" value="$2"
+  if [[ ! "$value" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    printf 'goob: %s may only use letters, numbers, dot, underscore, and dash: %s\n' "$kind" "$value" >&2
+    exit 2
   fi
-
-  candidate="$PWD/config/zellij"
-  if [[ -f "$candidate/profile.conf" ]]; then
-    cd "$candidate"
-    pwd
-    return
-  fi
-
-  return 1
 }
 
 profile_value() {
@@ -56,6 +48,28 @@ profile_value() {
       if (!found) print default_value
     }
   ' "$config_file"
+}
+
+find_config_dir() {
+  local candidate
+
+  if [[ -n "${GOOB_CONFIG_DIR:-}" ]]; then
+    candidate="$GOOB_CONFIG_DIR"
+    if [[ -f "$candidate/profile.conf" ]]; then
+      cd "$candidate"
+      pwd
+      return
+    fi
+  fi
+
+  candidate="$PWD/config/zellij"
+  if [[ -f "$candidate/profile.conf" ]]; then
+    cd "$candidate"
+    pwd
+    return
+  fi
+
+  return 1
 }
 
 resolve_profile_name() {
@@ -99,8 +113,236 @@ resolve_config_arg() {
     fi
   fi
 
+  if [[ ! -f "$config_dir/profile.conf" ]]; then
+    printf 'goob: missing %s/profile.conf\n' "$config_dir" >&2
+    exit 1
+  fi
+
   cd "$config_dir"
   pwd
+}
+
+install_profile() {
+  local config_dir="$1"
+  "$script_dir/zellij-workspace-init" --config "$config_dir" >/dev/null
+}
+
+auto_install_config() {
+  local config_dir="${1:-}"
+  if [[ -z "$config_dir" ]]; then
+    if ! config_dir="$(find_config_dir)"; then
+      return 1
+    fi
+  fi
+
+  install_profile "$config_dir"
+  printf '%s' "$config_dir"
+}
+
+profile_dir_from_installed_default() {
+  local profile_name
+  profile_name="$(resolve_profile_name "")"
+  printf '%s/.local/share/zellij-workspaces/profiles/%s' "$HOME" "$profile_name"
+}
+
+list_workspaces() {
+  local config_dir="$1" tabs_files=()
+  shopt -s nullglob
+  tabs_files=("$config_dir"/*.tabs)
+  shopt -u nullglob
+
+  for tabs_file in "${tabs_files[@]:-}"; do
+    basename "$tabs_file" .tabs
+  done
+}
+
+resolve_root() {
+  local root_arg="$1"
+  if [[ ! -d "$root_arg" ]]; then
+    printf 'goob: root directory does not exist: %s\n' "$root_arg" >&2
+    exit 1
+  fi
+  cd "$root_arg"
+  pwd
+}
+
+write_tabs_file() {
+  local config_dir="$1" workspace="$2"
+  shift 2
+
+  validate_name workspace "$workspace"
+  if [[ "$#" -eq 0 ]]; then
+    printf 'goob: workspace %s must have at least one tab\n' "$workspace" >&2
+    exit 2
+  fi
+
+  : > "$config_dir/$workspace.tabs"
+  for tab in "$@"; do
+    validate_name tab "$tab"
+    printf '%s\n' "$tab" >> "$config_dir/$workspace.tabs"
+  done
+}
+
+parse_tabs_csv() {
+  local csv="$1" tab
+  IFS=',' read -r -a parsed_tabs <<<"$csv"
+  if (( ${#parsed_tabs[@]} == 0 )); then
+    printf 'goob: expected at least one tab\n' >&2
+    exit 2
+  fi
+  for tab in "${parsed_tabs[@]}"; do
+    if [[ -z "$tab" ]]; then
+      printf 'goob: empty tab name in %s\n' "$csv" >&2
+      exit 2
+    fi
+  done
+}
+
+init_config() {
+  local force=false profile_name="" root_arg="$PWD" config_dir="$PWD/config/zellij"
+  local specs=() workspaces=() first_workspace workspace tabs_csv tab
+  local has_assignment=false has_plain_tabs=false
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --force)
+        force=true
+        shift
+        ;;
+      --name)
+        profile_name="${2:-}"
+        shift 2
+        ;;
+      --root | -r)
+        root_arg="${2:-}"
+        shift 2
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      -*)
+        printf 'goob: unknown init option %s\n' "$1" >&2
+        usage
+        exit 2
+        ;;
+      *)
+        specs+=("$1")
+        if [[ "$1" == *"="* ]]; then
+          has_assignment=true
+        else
+          has_plain_tabs=true
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  profile_name="${profile_name:-$(basename "$PWD")}"
+  validate_name profile "$profile_name"
+  root="$(resolve_root "$root_arg")"
+
+  if [[ "$has_assignment" == "true" && "$has_plain_tabs" == "true" ]]; then
+    printf 'goob: do not mix workspace=tab,tab specs with plain tab names\n' >&2
+    exit 2
+  fi
+
+  if [[ -e "$config_dir" && "$force" != "true" ]]; then
+    printf 'goob: %s already exists; pass --force to overwrite it\n' "$config_dir" >&2
+    exit 1
+  fi
+
+  rm -rf "$config_dir"
+  install -d "$config_dir"
+
+  if (( ${#specs[@]} == 0 )); then
+    workspace="main"
+    workspaces=("$workspace")
+    write_tabs_file "$config_dir" "$workspace" "${default_tabs[@]}"
+  elif [[ "$has_plain_tabs" == "true" ]]; then
+    workspace="main"
+    workspaces=("$workspace")
+    write_tabs_file "$config_dir" "$workspace" "${specs[@]}"
+  else
+    for spec in "${specs[@]}"; do
+      workspace="${spec%%=*}"
+      tabs_csv="${spec#*=}"
+      if [[ -z "$workspace" || -z "$tabs_csv" || "$workspace" == "$spec" ]]; then
+        printf 'goob: expected workspace=tab,tab, got %s\n' "$spec" >&2
+        exit 2
+      fi
+      parse_tabs_csv "$tabs_csv"
+      workspaces+=("$workspace")
+      write_tabs_file "$config_dir" "$workspace" "${parsed_tabs[@]}"
+    done
+  fi
+
+  first_workspace="${workspaces[0]}"
+  {
+    printf 'name=%s\n' "$profile_name"
+    printf 'root=%s\n' "$root"
+    printf 'default_workspace=%s\n' "$first_workspace"
+    printf 'default_workspaces=%s\n' "${workspaces[*]}"
+  } > "$config_dir/profile.conf"
+
+  install_profile "$config_dir"
+  printf 'Created and installed Zellij profile %s at %s.\n' "$profile_name" "$config_dir"
+  printf 'Run: goob %s\n' "$first_workspace"
+}
+
+run_install() {
+  local install_script="$script_dir/../install.sh"
+  if [[ ! -x "$install_script" ]]; then
+    printf 'goob: install is available from the source checkout, not the installed bin directory\n' >&2
+    exit 1
+  fi
+  exec "$install_script"
+}
+
+run_launch() {
+  local workspace="$1" session="" root_override="" config_dir="" profile_name profile_dir
+  shift
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -s | --session)
+        session="${2:-}"
+        shift 2
+        ;;
+      -r | --root)
+        root_override="$(resolve_root "${2:-}")"
+        shift 2
+        ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        printf 'goob: unknown launch argument %s\n' "$1" >&2
+        usage
+        exit 2
+        ;;
+    esac
+  done
+
+  validate_name workspace "$workspace"
+  if [[ -n "$session" ]]; then
+    validate_name session "$session"
+  fi
+
+  if config_dir="$(auto_install_config)"; then
+    profile_name="$(resolve_profile_name "$config_dir")"
+  else
+    profile_name="$(resolve_profile_name "")"
+    profile_dir="$(profile_dir_from_installed_default)"
+    if [[ ! -f "$profile_dir/profile.conf" ]]; then
+      printf 'goob: no local config/zellij and no installed default profile\n' >&2
+      usage
+      exit 1
+    fi
+  fi
+
+  exec "$script_dir/zwork" "$profile_name" "$workspace" "$session" "$root_override"
 }
 
 case "$command_name" in
@@ -110,12 +352,10 @@ case "$command_name" in
     ;;
   "")
     config_dir=""
-    if config_dir="$(find_config_dir)"; then
+    if config_dir="$(auto_install_config)"; then
       workspace="$(profile_value "$config_dir/profile.conf" default_workspace "")"
-      profile_name="$(resolve_profile_name "$config_dir")"
     else
-      profile_name="$(resolve_profile_name "")"
-      profile_dir="$HOME/.local/share/zellij-workspaces/profiles/$profile_name"
+      profile_dir="$(profile_dir_from_installed_default)"
       workspace="$(profile_value "$profile_dir/profile.conf" default_workspace "")"
     fi
 
@@ -124,51 +364,70 @@ case "$command_name" in
       exit 2
     fi
 
-    exec "$script_dir/zwork" "$profile_name" "$workspace"
+    run_launch "$workspace"
+    ;;
+  install)
+    shift
+    if [[ "$#" -gt 0 ]]; then
+      printf 'goob: install does not accept arguments\n' >&2
+      usage
+      exit 2
+    fi
+    run_install
+    ;;
+  init)
+    shift
+    init_config "$@"
     ;;
   setup)
     shift
     config_dir="$(resolve_config_arg "$@")"
-    exec "$script_dir/zellij-workspace-init" --config "$config_dir"
+    install_profile "$config_dir"
+    printf 'Installed Zellij profile %s.\n' "$(resolve_profile_name "$config_dir")"
     ;;
   doctor | check)
     shift
-    config_dir="$(resolve_config_arg "$@")"
+    if [[ "$#" -gt 0 ]]; then
+      config_dir="$(resolve_config_arg "$@")"
+    elif config_dir="$(auto_install_config)"; then
+      :
+    else
+      config_dir="$(profile_dir_from_installed_default)"
+    fi
     exec "$script_dir/zellij-workspace-doctor" --config "$config_dir"
     ;;
-  list)
+  ls | list)
     shift
     if [[ "$#" -gt 0 ]]; then
       config_dir="$(resolve_config_arg "$@")"
-      shopt -s nullglob
-      tabs_files=("$config_dir"/*.tabs)
-      shopt -u nullglob
     elif config_dir="$(find_config_dir)"; then
-      shopt -s nullglob
-      tabs_files=("$config_dir"/*.tabs)
-      shopt -u nullglob
+      :
     else
-      profile_name="$(resolve_profile_name "")"
-      profile_dir="$HOME/.local/share/zellij-workspaces/profiles/$profile_name"
-      shopt -s nullglob
-      tabs_files=("$profile_dir"/*.tabs)
-      shopt -u nullglob
+      config_dir="$(profile_dir_from_installed_default)"
     fi
-
-    for tabs_file in "${tabs_files[@]:-}"; do
-      basename "$tabs_file" .tabs
-    done
+    list_workspaces "$config_dir"
+    ;;
+  ps)
+    shift
+    if [[ "$#" -gt 0 ]]; then
+      printf 'goob: ps does not accept arguments\n' >&2
+      usage
+      exit 2
+    fi
+    exec zellij list-sessions
+    ;;
+  kill)
+    shift
+    session="${1:-}"
+    if [[ -z "$session" || "$#" -ne 1 ]]; then
+      printf 'goob: kill requires exactly one session name\n' >&2
+      usage
+      exit 2
+    fi
+    validate_name session "$session"
+    exec zellij delete-session "$session"
     ;;
   *)
-    workspace="$command_name"
-    shift
-    config_dir=""
-    if config_dir="$(find_config_dir)"; then
-      profile_name="$(resolve_profile_name "$config_dir")"
-    else
-      profile_name="$(resolve_profile_name "")"
-    fi
-
-    exec "$script_dir/zwork" "$profile_name" "$workspace" "$@"
+    run_launch "$command_name" "${@:2}"
     ;;
 esac

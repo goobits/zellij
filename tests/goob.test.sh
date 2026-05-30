@@ -22,6 +22,14 @@ fi
 if [[ "${1:-}" == "setup" && "${2:-}" == "--check" ]]; then
   exit 0
 fi
+if [[ "${1:-}" == "list-sessions" ]]; then
+  printf 'frontend\nbackend\n'
+  exit 0
+fi
+if [[ "${1:-}" == "delete-session" ]]; then
+  printf '%s\n' "${2:-}" > "${FAKE_ZELLIJ_DELETED_SESSION:?}"
+  exit 0
+fi
 exit 0
 EOF
 chmod +x "$tmp/fake-bin/zellij"
@@ -71,7 +79,7 @@ HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
 
 listed="$(
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
-    "$tmp/home/.local/bin/goob" list --config "$profile_dir"
+    "$tmp/home/.local/bin/goob" ls --config "$profile_dir"
 )"
 expected_list=$'backend\nextra\nfrontend'
 if [[ "$listed" != "$expected_list" ]]; then
@@ -104,12 +112,31 @@ fi
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
   FAKE_ZELLIJ_ORDER_ARGS="$tmp/extra-order.txt" \
-    "$tmp/home/.local/bin/goob" extra extra-session /tmp/project
+    "$tmp/home/.local/bin/goob" extra -s extra-session -r "$tmp/project"
 )
 
 extra_order="$(cat "$tmp/extra-order.txt")"
 expected_extra_order=$'extra-session\nnotes\nscratch'
 if [[ "$extra_order" != "$expected_extra_order" ]]; then
   printf 'Unexpected extra workspace order:\n%s\n' "$extra_order" >&2
+  exit 1
+fi
+
+sessions="$(
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" ps
+)"
+if [[ "$sessions" != $'frontend\nbackend' ]]; then
+  printf 'Unexpected goob ps output:\n%s\n' "$sessions" >&2
+  exit 1
+fi
+
+HOME="$tmp/home" \
+PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+FAKE_ZELLIJ_DELETED_SESSION="$tmp/deleted-session.txt" \
+  "$tmp/home/.local/bin/goob" kill extra-session >/dev/null
+
+if [[ "$(cat "$tmp/deleted-session.txt")" != "extra-session" ]]; then
+  printf 'Expected goob kill to delete extra-session\n' >&2
   exit 1
 fi

@@ -11,23 +11,48 @@ are generic; project-specific profiles live outside this directory, such as
 From this directory:
 
 ```bash
-./install.sh
+goob install
 ```
 
 This installs the shared Zellij helpers and shell integration.
 
-### 📦 Install A Profile
-
-Install any profile directory that contains `profile.conf` and one or more
-`*.tabs` files:
+If `goob` is not installed yet, run the source installer once:
 
 ```bash
-goob setup --config "$PWD/examples/basic-website"
+./install.sh
+```
+
+### 📦 Create Repo Config
+
+Create `config/zellij/profile.conf` and `config/zellij/main.tabs` with sane
+defaults:
+
+```bash
+goob init
+```
+
+Create one workspace with custom tabs:
+
+```bash
+goob init app server infra docs
+```
+
+Create multiple workspaces:
+
+```bash
+goob init frontend=app,ui,tools backend=infra,api,db
+```
+
+Overwrite existing generated config:
+
+```bash
+goob init --force frontend=app,ui backend=infra,api
 ```
 
 ### ▶️ Open A Workspace
 
-Open the default workspace:
+Open the default workspace. If `./config/zellij` exists, `goob` installs or
+refreshes it automatically before opening Zellij:
 
 ```bash
 goob
@@ -39,10 +64,18 @@ Open a named workspace:
 goob default
 ```
 
+Open a named session or override the root directory:
+
+```bash
+goob frontend -s sketch-api-2
+goob frontend -r /custom/workspace/path
+goob frontend -s sketch-api-2 -r /custom/workspace/path
+```
+
 List available workspaces:
 
 ```bash
-goob list
+goob ls
 ```
 
 ### ✅ Check Setup
@@ -50,7 +83,7 @@ goob list
 Validate the install and profile:
 
 ```bash
-goob doctor --config "$PWD/examples/basic-website"
+goob doctor
 ```
 
 ## 🧰 Commands
@@ -58,12 +91,19 @@ goob doctor --config "$PWD/examples/basic-website"
 ### Friend-Facing Commands
 
 ```bash
-goob setup --config /path/to/profile   # Install a profile
-goob doctor --config /path/to/profile  # Check install and profile
-goob list                              # List installed workspaces
+goob install                           # Install shared tooling
+goob init                              # Create config/zellij with defaults
+goob init app server infra docs        # Create main.tabs with custom tabs
+goob init frontend=app backend=api,db  # Create multiple workspaces
+goob setup --config /path/to/profile   # Install/link a profile explicitly
+goob doctor                            # Check install and current profile
+goob ls                                # List workspaces
+goob ps                                # List running Zellij sessions
+goob kill <session>                    # Kill a running session
 goob                                   # Open default workspace
-goob <workspace>                       # Open any <workspace>.tabs
-goob <workspace> <session>             # Open named session variant
+goob <workspace>                       # Open a workspace
+goob <workspace> -s <session>          # Open named session
+goob <workspace> -r <root>             # Override root directory
 ```
 
 ### Lower-Level Commands
@@ -79,10 +119,11 @@ debugging, and reuse outside this repo.
 
 ## 📁 Profiles
 
-A profile is a directory with inert config data and tab lists:
+A profile is a directory with inert config data and tab lists. In normal repos,
+this lives at `config/zellij/`:
 
 ```text
-profiles/my-site/
+config/zellij/
   profile.conf
   frontend.tabs
   backend.tabs
@@ -108,6 +149,24 @@ scratch
 
 `goob <workspace>` works for any installed `<workspace>.tabs` file, so
 `frontend` and `backend` are only defaults, not special cases.
+
+`goob init` defaults to:
+
+```text
+name=<current-directory-name>
+root=<current-directory-path>
+default_workspace=main
+default_workspaces=main
+```
+
+with `main.tabs`:
+
+```text
+app
+server
+infra
+scratch
+```
 
 ## 🧩 What It Installs
 
@@ -207,6 +266,7 @@ bash tests/zellij-launch-session.test.sh
 bash tests/zellij-agent-tab-watcher.test.sh
 bash tests/zellij-session-tab-order.test.sh
 bash tests/zellij-session-specs.test.sh
+bash tests/goob-init.test.sh
 bash tests/goob.test.sh
 bash tests/zellij-workspace-init.test.sh
 ```

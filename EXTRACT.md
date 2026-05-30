@@ -19,6 +19,7 @@ zellij-workspaces/
   examples/
     basic-website/
   tests/
+    goob-init.test.sh
   install.sh
   README.md
 ```
@@ -26,9 +27,9 @@ zellij-workspaces/
 Keep project-specific tab lists in profile directories:
 
 ```text
-profiles/my-site/
+config/zellij/
   profile.conf
-  default.tabs
+  main.tabs
 ```
 
 Do not source `profile.conf`; parse it as inert `key=value` data.
