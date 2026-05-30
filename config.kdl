@@ -30,6 +30,8 @@ keybinds {
     normal {
         bind "Super c" { Copy; }
         bind "Alt c" { Copy; }
+        bind "Alt Backspace" { Write 23; }
+        bind "Super Backspace" { Write 21; }
         bind "Ctrl y" { Copy; }
         bind "PageUp" { PageScrollUp; SwitchToMode "Scroll"; }
         bind "PageDown" { PageScrollDown; }

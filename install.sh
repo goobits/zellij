@@ -119,6 +119,13 @@ if [[ -t 0 ]]; then
   stty -ixon 2>/dev/null
 fi
 
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+  bindkey -M viins '^[^?' backward-kill-word 2>/dev/null
+  bindkey -M viins '^[^H' backward-kill-word 2>/dev/null
+  bindkey -M emacs '^[^?' backward-kill-word 2>/dev/null
+  bindkey -M emacs '^[^H' backward-kill-word 2>/dev/null
+fi
+
 if [[ -n "${ZELLIJ:-}" ]]; then
   codex() {
     local arg
