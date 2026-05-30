@@ -10,10 +10,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HOME="$tmp/home" \
-ZELLIJ_INSTALL_BINARY=0 \
-ZELLIJ_INSTALL_SHELL_RC=0 \
-  "$zellij_dir/install.sh" >/dev/null
+install_output="$(
+  HOME="$tmp/home" \
+  ZELLIJ_INSTALL_BINARY=0 \
+  ZELLIJ_INSTALL_SHELL_RC=0 \
+    "$zellij_dir/install.sh"
+)"
+
+expected_output=$'Installed Zellij workspace setup.\nOpen a new shell or run: export PATH="$HOME/.local/bin:$PATH"\nIn a project directory, create a profile with: goob init\nThen open the workspace with: goob'
+if [[ "$install_output" != "$expected_output" ]]; then
+  printf 'Unexpected install output:\n%s\n' "$install_output" >&2
+  exit 1
+fi
 
 for executable in \
   zellij-launch-session \

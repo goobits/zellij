@@ -87,6 +87,25 @@ if [[ "$listed" != "$expected_list" ]]; then
   exit 1
 fi
 
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/missing-order.txt" \
+    "$tmp/home/.local/bin/goob" frtonend >"$tmp/missing.out" 2>"$tmp/missing.err"
+); then
+  printf 'Expected goob to reject missing workspace\n' >&2
+  exit 1
+fi
+
+missing_error="$(cat "$tmp/missing.err")"
+expected_missing_error=$'goob: missing workspace frtonend in '"$tmp/home/.local/share/zellij-workspaces/profiles/my-site"$'\nAvailable workspaces:\nbackend\nextra\nfrontend'
+if [[ "$missing_error" != "$expected_missing_error" ]]; then
+  printf 'Unexpected missing workspace error:\n%s\n' "$missing_error" >&2
+  exit 1
+fi
+
 : > "$tmp/tabs.tsv"
 : > "$tmp/tabs.tsv.panes"
 

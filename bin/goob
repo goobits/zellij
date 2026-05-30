@@ -156,6 +156,23 @@ list_workspaces() {
   done
 }
 
+workspace_exists_or_exit() {
+  local profile_dir="$1" workspace="$2" available
+
+  if [[ -f "$profile_dir/$workspace.tabs" ]]; then
+    return
+  fi
+
+  printf 'goob: missing workspace %s in %s\n' "$workspace" "$profile_dir" >&2
+  available="$(list_workspaces "$profile_dir")"
+  if [[ -n "$available" ]]; then
+    printf 'Available workspaces:\n%s\n' "$available" >&2
+  else
+    printf 'No workspaces are installed for this profile.\n' >&2
+  fi
+  exit 1
+}
+
 resolve_root() {
   local root_arg="$1"
   if [[ ! -d "$root_arg" ]]; then
@@ -332,6 +349,7 @@ run_launch() {
 
   if config_dir="$(auto_install_config)"; then
     profile_name="$(resolve_profile_name "$config_dir")"
+    profile_dir="$HOME/.local/share/zellij-workspaces/profiles/$profile_name"
   else
     profile_name="$(resolve_profile_name "")"
     profile_dir="$(profile_dir_from_installed_default)"
@@ -342,6 +360,7 @@ run_launch() {
     fi
   fi
 
+  workspace_exists_or_exit "$profile_dir" "$workspace"
   exec "$script_dir/zwork" "$profile_name" "$workspace" "$session" "$root_override"
 }
 

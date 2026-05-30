@@ -5,7 +5,16 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 zellij_version="${ZELLIJ_VERSION:-0.44.3}"
 start_marker="# >>> zellij workspaces >>>"
 end_marker="# <<< zellij workspaces <<<"
-export PATH="$HOME/.local/bin:$PATH"
+original_path="${PATH:-}"
+local_bin="$HOME/.local/bin"
+export PATH="$local_bin:$PATH"
+
+original_path_has_local_bin() {
+  case ":$original_path:" in
+    *":$local_bin:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 install_zellij_binary() {
   if command -v zellij >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/zellij" ]]; then
@@ -177,4 +186,8 @@ if [[ "${ZELLIJ_INSTALL_SHELL_RC:-1}" != "0" ]]; then
 fi
 
 printf 'Installed Zellij workspace setup.\n'
-printf 'Install or create a profile, then run: zwork <profile> <workspace>\n'
+if ! original_path_has_local_bin; then
+  printf 'Open a new shell or run: export PATH="$HOME/.local/bin:$PATH"\n'
+fi
+printf 'In a project directory, create a profile with: goob init\n'
+printf 'Then open the workspace with: goob\n'
