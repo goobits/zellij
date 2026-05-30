@@ -8,7 +8,7 @@ check_layout_tabs() {
   local name profile_dir rendered spec expected actual
 
   name="$1"
-  profile_dir="$zellij_dir/profiles/sketch-api"
+  profile_dir="$zellij_dir/examples/basic-website"
   spec="$profile_dir/${name}.tabs"
   rendered="$("$zellij_dir/bin/zellij-render-layout" "$spec" /workspace)"
   expected="$(cat "$spec")"
@@ -21,5 +21,4 @@ check_layout_tabs() {
   fi
 }
 
-check_layout_tabs backend
-check_layout_tabs frontend
+check_layout_tabs default

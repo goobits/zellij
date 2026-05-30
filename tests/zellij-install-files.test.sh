@@ -16,8 +16,6 @@ ZELLIJ_INSTALL_SHELL_RC=0 \
   "$zellij_dir/install.sh" >/dev/null
 
 for executable in \
-  zbackend \
-  zfrontend \
   zellij-launch-session \
   zellij-session-tab-order \
   zellij-saved-session-order \
@@ -34,10 +32,7 @@ do
 done
 
 for file in \
-  .config/zellij/config.kdl \
-  .local/share/zellij-workspaces/profiles/sketch-api/profile.conf \
-  .local/share/zellij-workspaces/profiles/sketch-api/backend.tabs \
-  .local/share/zellij-workspaces/profiles/sketch-api/frontend.tabs
+  .config/zellij/config.kdl
 do
   if [[ ! -f "$tmp/home/$file" ]]; then
     printf 'Expected installed file %s\n' "$file" >&2

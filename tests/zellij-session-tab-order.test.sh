@@ -10,22 +10,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-session_dir="$tmp/zellij/contract_version_1/session_info/test-backend"
+session_dir="$tmp/zellij/contract_version_1/session_info/test-workspace"
 mkdir -p "$session_dir"
 
 cat > "$session_dir/session-layout.kdl" <<'EOF'
 layout {
     cwd "/workspace"
-    tab name="electron" hide_floating_panes=true {
+    tab name="database" hide_floating_panes=true {
         pane contents_file="initial_contents_1"
     }
     tab name="scratch 🤖" focus=true hide_floating_panes=true {
         pane focus=true contents_file="initial_contents_2"
     }
-    tab name="infra" hide_floating_panes=true {
+    tab name="editor" hide_floating_panes=true {
         pane contents_file="initial_contents_3"
     }
-    tab name="accounts" hide_floating_panes=true {
+    tab name="server" hide_floating_panes=true {
         pane contents_file="initial_contents_4"
     }
     tab name="custom" hide_floating_panes=true {
@@ -38,11 +38,11 @@ layout {
 EOF
 
 cat > "$session_dir/session-metadata.kdl" <<'EOF'
-name "test-backend"
+name "test-workspace"
 tabs {
     tab {
         position 0
-        name "electron"
+        name "database"
         tab_id 0
     }
     tab {
@@ -52,12 +52,12 @@ tabs {
     }
     tab {
         position 2
-        name "infra"
+        name "editor"
         tab_id 2
     }
     tab {
         position 3
-        name "accounts"
+        name "server"
         tab_id 3
     }
     tab {
@@ -91,12 +91,12 @@ panes {
 EOF
 
 XDG_CACHE_HOME="$tmp" ZELLIJ_SESSION_TAB_ORDER_SAVED_ONLY=1 \
-  "$helper" test-backend infra accounts commerce assets storage electron scratch
+  "$helper" test-workspace editor server database logs scratch
 
 layout_order="$(
   awk -F '"' '/^    tab name=/ { print $2 }' "$session_dir/session-layout.kdl"
 )"
-expected_layout_order=$'infra\naccounts\nelectron\nscratch 🤖\ncustom'
+expected_layout_order=$'editor\nserver\ndatabase\nscratch 🤖\ncustom'
 
 if [[ "$layout_order" != "$expected_layout_order" ]]; then
   printf 'Unexpected session-layout tab order:\n%s\n' "$layout_order" >&2
@@ -111,7 +111,7 @@ metadata_order="$(
     in_tab && /^    \}/ { print position "\t" name; in_tab = 0 }
   ' "$session_dir/session-metadata.kdl"
 )"
-expected_metadata_order=$'0\tinfra\n1\taccounts\n2\telectron\n3\tscratch\n4\tcustom'
+expected_metadata_order=$'0\teditor\n1\tserver\n2\tdatabase\n3\tscratch\n4\tcustom'
 
 if [[ "$metadata_order" != "$expected_metadata_order" ]]; then
   printf 'Unexpected session-metadata tab order:\n%s\n' "$metadata_order" >&2
@@ -135,22 +135,22 @@ ln -s "$script_dir/fixtures/fake-zellij" "$live_bin/zellij"
 
 cat > "$live_state" <<'EOF'
 0	0	true	infra
-1	1	false	accounts
-2	2	false	commerce
-3	3	false	assets
-4	4	false	storage
+1	1	false	server
+2	2	false	logs
+3	3	false	docs
+4	4	false	preview
 5	5	false	scratch
 EOF
 
 : > "${live_state}.panes"
 
 PATH="$live_bin:$PATH" FAKE_ZELLIJ_TABS="$live_state" XDG_CACHE_HOME="$tmp/live-cache" ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 \
-  "$helper" test-live infra accounts commerce assets storage electron scratch
+  "$helper" test-live infra server logs docs preview database scratch
 
 live_order="$(
   sort -t $'\t' -k2,2n "$live_state" | awk -F '\t' '{ print $4 }'
 )"
-expected_live_order=$'infra\naccounts\ncommerce\nassets\nstorage\nelectron\nscratch'
+expected_live_order=$'infra\nserver\nlogs\ndocs\npreview\ndatabase\nscratch'
 
 if [[ "$live_order" != "$expected_live_order" ]]; then
   printf 'Unexpected live tab order:\n%s\n' "$live_order" >&2

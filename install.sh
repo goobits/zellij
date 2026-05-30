@@ -5,8 +5,6 @@ source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 zellij_version="${ZELLIJ_VERSION:-0.44.3}"
 start_marker="# >>> zellij workspaces >>>"
 end_marker="# <<< zellij workspaces <<<"
-old_start_marker="# >>> sketch-api zellij >>>"
-old_end_marker="# <<< sketch-api zellij <<<"
 export PATH="$HOME/.local/bin:$PATH"
 
 install_zellij_binary() {
@@ -94,15 +92,11 @@ install_files() {
     zellij-open-session
     zellij-render-layout
     zwork
-    zbackend
-    zfrontend
     zellij-agent-tab-watcher
   )
 
   install -d "$HOME/.config/zellij" "$HOME/.local/bin" "$HOME/.local/share/zellij-workspaces/profiles"
   install -m 0644 "$source_dir/config.kdl" "$HOME/.config/zellij/config.kdl"
-  rm -rf "$HOME/.local/share/zellij-workspaces/profiles/sketch-api"
-  cp -R "$source_dir/profiles/sketch-api" "$HOME/.local/share/zellij-workspaces/profiles/sketch-api"
 
   for executable in "${executables[@]}"; do
     target="$executable"
@@ -113,7 +107,6 @@ install_files() {
   done
 
   rm -f "$HOME/.local/bin/.zellij-codex-tab-watcher"
-  rm -rf "$HOME/.local/share/sketch-api-zellij"
   rm -f "$HOME/.config/zellij/layouts/backend.kdl" "$HOME/.config/zellij/layouts/frontend.kdl"
 }
 
@@ -150,9 +143,9 @@ update_shell_file() {
   file="$1"
   tmp="$(mktemp)"
   touch "$file"
-  awk -v start="$start_marker" -v end="$end_marker" -v old_start="$old_start_marker" -v old_end="$old_end_marker" '
-    $0 == start || $0 == old_start { skip = 1; next }
-    $0 == end || $0 == old_end { skip = 0; next }
+  awk -v start="$start_marker" -v end="$end_marker" '
+    $0 == start { skip = 1; next }
+    $0 == end { skip = 0; next }
     skip != 1 { print }
   ' "$file" > "$tmp"
 
@@ -174,4 +167,4 @@ if [[ "${ZELLIJ_INSTALL_SHELL_RC:-1}" != "0" ]]; then
 fi
 
 printf 'Installed Zellij workspace setup.\n'
-printf 'Open a new shell, then run: zwork sketch-api backend\n'
+printf 'Install or create a profile, then run: zwork <profile> <workspace>\n'
