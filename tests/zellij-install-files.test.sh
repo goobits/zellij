@@ -51,6 +51,16 @@ do
   fi
 done
 
+if grep -F '/usr/bin/zsh' "$tmp/home/.config/zellij/config.kdl" >/dev/null; then
+  printf 'Installed Zellij config should not hardcode Linux zsh paths\n' >&2
+  exit 1
+fi
+
+if ! grep -F 'post_command_discovery_hook "printf' "$tmp/home/.config/zellij/config.kdl" | grep -F '${SHELL:-sh}' >/dev/null; then
+  printf 'Expected installed Zellij config to restore panes with the user shell\n' >&2
+  exit 1
+fi
+
 if [[ -e "$tmp/home/.zshrc" || -e "$tmp/home/.bashrc" ]]; then
   printf 'Shell rc files should not be created when ZELLIJ_INSTALL_SHELL_RC=0\n' >&2
   exit 1
