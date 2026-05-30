@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+profile_dir="${1:-}"
+workspace="${2:-}"
+session="${3:-}"
+workdir="${4:-}"
+
+if [[ -z "$profile_dir" || -z "$workspace" || -z "$session" || -z "$workdir" ]]; then
+  printf 'usage: zellij-open-session <profile-dir> <workspace> <session> <workdir>\n' >&2
+  exit 2
+fi
+
+if [[ ! "$workspace" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+  printf 'zellij-open-session: workspace names may only use letters, numbers, dot, underscore, and dash\n' >&2
+  exit 2
+fi
+
+if [[ ! -d "$profile_dir" ]]; then
+  printf 'zellij-open-session: missing profile directory %s\n' "$profile_dir" >&2
+  exit 1
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+profile_name="$(basename "$profile_dir")"
+profile_name="${profile_name//[^A-Za-z0-9_.-]/_}"
+session_spec="$profile_dir/${workspace}.tabs"
+
+if [[ ! -f "$session_spec" ]]; then
+  printf 'zwork: missing workspace spec %s\n' "$session_spec" >&2
+  exit 1
+fi
+
+layout_dir="${XDG_RUNTIME_DIR:-/tmp}/zellij-workspaces-${UID}"
+layout_file="$layout_dir/${profile_name}-${workspace}.kdl"
+install -d "$layout_dir"
+"$script_dir/zellij-render-layout" "$session_spec" "$workdir" > "$layout_file"
+
+mapfile -t tab_order < "$session_spec"
+exec "$script_dir/zellij-launch-session" "$layout_file" "$session" "$workdir" "${tab_order[@]}"
