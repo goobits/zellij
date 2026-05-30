@@ -5,7 +5,7 @@ session="${1:-}"
 shift || true
 
 if [[ -z "$session" || "$#" -eq 0 ]]; then
-  printf 'usage: zellij-live-tab-order <session> <tab-name>...\n' >&2
+  printf 'usage: zellij-live-tab-order <session> <tab-name>[<tab><cwd>]...\n' >&2
   exit 2
 fi
 
@@ -53,7 +53,18 @@ close_status_bar_panes() {
   )
 }
 
-desired_tabs=("$@")
+desired_tabs=()
+desired_cwds=()
+for tab_spec in "$@"; do
+  tab_name="${tab_spec%%$'\t'*}"
+  tab_cwd="${ZELLIJ_SESSION_TAB_DEFAULT_CWD:-${PWD:-/workspace}}"
+  if [[ "$tab_spec" == *$'\t'* ]]; then
+    tab_cwd="${tab_spec#*$'\t'}"
+  fi
+  [[ -n "$tab_name" ]] || continue
+  desired_tabs+=("$tab_name")
+  desired_cwds+=("$tab_cwd")
+done
 
 tab_query='
   def base_name:
@@ -73,36 +84,15 @@ active_tab_id="$(
   jq -r '.[] | select(.active == true) | .tab_id' <<<"$tab_state" 2>/dev/null | head -n 1
 )"
 
-if [[ "${ZELLIJ_SESSION_TAB_ORDER_CANONICAL:-0}" == "1" ]]; then
-  tab_count="$(jq -r 'length' <<<"$tab_state" 2>/dev/null || printf '0')"
-  if [[ "$tab_count" =~ ^[0-9]+$ ]] && (( tab_count == $# )); then
-    while IFS=$'\t' read -r tab_id position; do
-      [[ "$tab_id" =~ ^[0-9]+$ && "$position" =~ ^[0-9]+$ ]] || continue
-      tab_name="${desired_tabs[$position]:-}"
-      if [[ -z "$tab_name" ]]; then
-        continue
-      fi
-      ZELLIJ_SESSION_NAME="$session" zellij action rename-tab-by-id "$tab_id" "$tab_name" >/dev/null 2>&1 || true
-    done < <(
-      jq -r '
-        sort_by(.position)
-        | .[]
-        | [.tab_id, .position]
-        | @tsv
-      ' <<<"$tab_state" 2>/dev/null || true
-    )
-    tab_state="$(list_tabs)"
-  fi
-fi
-
 if [[ "${ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING:-0}" == "1" ]]; then
-  for tab_name in "${desired_tabs[@]}"; do
+  for tab_index in "${!desired_tabs[@]}"; do
+    tab_name="${desired_tabs[$tab_index]}"
     row="$(jq -r --arg name "$tab_name" "$tab_query" <<<"$tab_state" 2>/dev/null | head -n 1)"
     if [[ -n "$row" ]]; then
       continue
     fi
 
-    ZELLIJ_SESSION_NAME="$session" zellij action new-tab --name "$tab_name" --cwd "${PWD:-/workspace}" >/dev/null 2>&1 || true
+    ZELLIJ_SESSION_NAME="$session" zellij action new-tab --name "$tab_name" --cwd "${desired_cwds[$tab_index]}" >/dev/null 2>&1 || true
     tab_state="$(list_tabs)"
     [[ -n "$tab_state" ]] || exit 0
   done
@@ -111,7 +101,7 @@ fi
 close_status_bar_panes
 
 target_position=0
-for tab_name in "$@"; do
+for tab_name in "${desired_tabs[@]}"; do
   tab_state="$(list_tabs)"
   [[ -n "$tab_state" ]] || continue
 

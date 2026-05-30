@@ -29,7 +29,7 @@ if [[ -d "$workdir" ]]; then
 fi
 
 if [[ -x "$tab_order_helper" ]]; then
-  ZELLIJ_SESSION_TAB_ORDER_CANONICAL=1 ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 "$tab_order_helper" "$session" "$@"
+  ZELLIJ_SESSION_TAB_DEFAULT_CWD="$workdir" ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 "$tab_order_helper" "$session" "$@"
 fi
 
 if [[ -x "$HOME/.local/bin/.zellij-agent-tab-watcher" ]]; then

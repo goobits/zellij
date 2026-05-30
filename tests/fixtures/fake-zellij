@@ -68,6 +68,7 @@ case "${1:-}" in
     ;;
   new-tab)
     name=""
+    cwd=""
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
         --name | -n)
@@ -75,6 +76,7 @@ case "${1:-}" in
           shift 2
           ;;
         --cwd | -c)
+          cwd="${2:-}"
           shift 2
           ;;
         *)
@@ -87,6 +89,7 @@ case "${1:-}" in
     next_pane_id="$(awk -F '\t' 'BEGIN { max = 99 } { if ($1 > max) max = $1 } END { print max + 1 }' "$panes")"
     printf '%s\t%s\tfalse\t%s\n' "$next_id" "$next_position" "$name" >> "$state"
     printf '%s\t%s\t%s\ttrue\tzellij:status-bar\n' "$next_pane_id" "$next_id" "$name" >> "$panes"
+    printf '%s\t%s\n' "$name" "$cwd" >> "${state}.cwds"
     printf '%s\n' "$next_id"
     ;;
   close-pane)

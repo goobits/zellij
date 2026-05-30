@@ -5,7 +5,7 @@ session="${1:-}"
 shift || true
 
 if [[ -z "$session" || "$#" -eq 0 ]]; then
-  printf 'usage: zellij-saved-session-order <session> <tab-name>...\n' >&2
+  printf 'usage: zellij-saved-session-order <session> <tab-name>[<tab><cwd>]...\n' >&2
   exit 2
 fi
 
@@ -20,7 +20,13 @@ fi
 
 layout_file="${XDG_CACHE_HOME:-$HOME/.cache}/zellij/contract_version_1/session_info/$session/session-layout.kdl"
 metadata_file="${XDG_CACHE_HOME:-$HOME/.cache}/zellij/contract_version_1/session_info/$session/session-metadata.kdl"
-order="$(printf '%s\n' "$@")"
+desired_tabs=()
+for tab_spec in "$@"; do
+  tab_name="${tab_spec%%$'\t'*}"
+  [[ -n "$tab_name" ]] || continue
+  desired_tabs+=("$tab_name")
+done
+order="$(printf '%s\n' "${desired_tabs[@]}")"
 
 if [[ -f "$layout_file" ]]; then
   ZELLIJ_TAB_ORDER="$order" perl -0pi -e '
@@ -68,14 +74,6 @@ if [[ -f "$layout_file" ]]; then
         push @suffix, $lines[$index++];
       } else {
         push @prefix, $lines[$index++];
-      }
-    }
-
-    if (($ENV{ZELLIJ_SESSION_TAB_ORDER_CANONICAL} // "") eq "1" && @blocks == @desired) {
-      for my $index (0 .. $#blocks) {
-        my $name = $desired[$index];
-        $blocks[$index]->{name} = $name;
-        $blocks[$index]->{text} =~ s/^    tab name="[^"]*"/"    tab name=\"" . quote_name($name) . "\""/me;
       }
     }
 
@@ -176,17 +174,6 @@ if [[ -f "$metadata_file" ]]; then
         push @between, $lines[$index++];
       } else {
         push @suffix, $lines[$index++];
-      }
-    }
-
-    if (($ENV{ZELLIJ_SESSION_TAB_ORDER_CANONICAL} // "") eq "1" && @tabs == @desired) {
-      for my $index (0 .. $#tabs) {
-        my $tab = $tabs[$index];
-        my $desired_index = defined $tab->{old_position} ? $tab->{old_position} : $tab->{ordinal};
-        next if $desired_index !~ /^[0-9]+\z/ || $desired_index > $#desired;
-        my $name = $desired[$desired_index];
-        $tab->{name} = $name;
-        $tab->{text} =~ s/^        name "[^"]*"/"        name \"" . quote_name($name) . "\""/me;
       }
     }
 

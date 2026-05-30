@@ -91,7 +91,7 @@ panes {
 EOF
 
 XDG_CACHE_HOME="$tmp" ZELLIJ_SESSION_TAB_ORDER_SAVED_ONLY=1 \
-  "$helper" test-workspace editor server database logs scratch
+  "$helper" test-workspace editor server $'database\t/tmp/database' logs scratch
 
 layout_order="$(
   awk -F '"' '/^    tab name=/ { print $2 }' "$session_dir/session-layout.kdl"
@@ -145,7 +145,7 @@ EOF
 : > "${live_state}.panes"
 
 PATH="$live_bin:$PATH" FAKE_ZELLIJ_TABS="$live_state" XDG_CACHE_HOME="$tmp/live-cache" ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 \
-  "$helper" test-live infra server logs docs preview database scratch
+  "$helper" test-live infra server logs docs preview $'database\t/tmp/database' scratch
 
 live_order="$(
   sort -t $'\t' -k2,2n "$live_state" | awk -F '\t' '{ print $4 }'
@@ -159,6 +159,11 @@ fi
 
 if [[ ! -f "${live_state}.saved" ]]; then
   printf 'Expected live session to be saved after creating missing tabs\n' >&2
+  exit 1
+fi
+
+if ! grep -Fx $'database\t/tmp/database' "${live_state}.cwds" >/dev/null; then
+  printf 'Expected created database tab to use tab-specific cwd\n' >&2
   exit 1
 fi
 

@@ -34,7 +34,13 @@ cat <<'EOF'
 EOF
 
 first_tab=1
-while IFS= read -r tab_name || [[ -n "$tab_name" ]]; do
+while IFS= read -r tab_spec || [[ -n "$tab_spec" ]]; do
+  [[ -n "$tab_spec" ]] || continue
+  tab_name="${tab_spec%%$'\t'*}"
+  tab_cwd=""
+  if [[ "$tab_spec" == *$'\t'* ]]; then
+    tab_cwd="${tab_spec#*$'\t'}"
+  fi
   [[ -n "$tab_name" ]] || continue
   if (( first_tab == 1 )); then
     printf '    tab name="%s" focus=true {\n' "$(escape_kdl_string "$tab_name")"
@@ -42,7 +48,11 @@ while IFS= read -r tab_name || [[ -n "$tab_name" ]]; do
   else
     printf '    tab name="%s" {\n' "$(escape_kdl_string "$tab_name")"
   fi
-  printf '        pane\n'
+  if [[ -n "$tab_cwd" ]]; then
+    printf '        pane cwd="%s"\n' "$(escape_kdl_string "$tab_cwd")"
+  else
+    printf '        pane\n'
+  fi
   printf '    }\n\n'
 done < "$tabs_file"
 

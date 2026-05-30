@@ -5,7 +5,7 @@ session="${1:-}"
 shift || true
 
 if [[ -z "$session" || "$#" -eq 0 ]]; then
-  printf 'usage: zellij-session-tab-order <session> <tab-name>...\n' >&2
+  printf 'usage: zellij-session-tab-order <session> <tab-name>[<tab><cwd>]...\n' >&2
   exit 2
 fi
 
