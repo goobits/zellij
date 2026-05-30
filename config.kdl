@@ -20,6 +20,12 @@ copy_on_select false
 osc8_hyperlinks true
 show_release_notes false
 
+ui {
+    pane_frames {
+        hide_session_name true
+    }
+}
+
 keybinds {
     normal {
         bind "Super c" { Copy; }
