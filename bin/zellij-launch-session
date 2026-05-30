@@ -24,9 +24,29 @@ fi
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 tab_order_helper="$script_dir/zellij-session-tab-order"
 
+repair_saved_session_shells() {
+  local user_shell="${SHELL:-}" broken_shell="${ZELLIJ_REPAIR_BROKEN_SHELL:-/usr/bin/zsh}"
+  local session_dir file
+
+  [[ -n "$user_shell" && -x "$user_shell" ]] || return 0
+  [[ -n "$broken_shell" && "$broken_shell" != "$user_shell" ]] || return 0
+  [[ ! -x "$broken_shell" ]] || return 0
+  command -v perl >/dev/null 2>&1 || return 0
+
+  session_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zellij/contract_version_1/session_info/$session"
+  for file in "$session_dir/session-layout.kdl" "$session_dir/session-metadata.kdl"; do
+    [[ -f "$file" ]] || continue
+    ZELLIJ_BROKEN_SHELL="$broken_shell" ZELLIJ_USER_SHELL="$user_shell" perl -0pi -e '
+      s/\Q$ENV{ZELLIJ_BROKEN_SHELL}\E/$ENV{ZELLIJ_USER_SHELL}/g
+    ' "$file"
+  done
+}
+
 if [[ -d "$workdir" ]]; then
   cd "$workdir"
 fi
+
+repair_saved_session_shells
 
 if [[ -x "$tab_order_helper" ]]; then
   ZELLIJ_SESSION_TAB_DEFAULT_CWD="$workdir" ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 "$tab_order_helper" "$session" "$@"

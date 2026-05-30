@@ -444,7 +444,7 @@ case "$command_name" in
       exit 2
     fi
     validate_name session "$session"
-    exec zellij delete-session "$session"
+    exec zellij delete-session --force "$session"
     ;;
   *)
     run_launch "$command_name" "${@:2}"

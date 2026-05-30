@@ -76,3 +76,61 @@ if [[ "$frontend_order" != "$expected_frontend_order" ]]; then
   printf 'Unexpected frontend fallback tab order:\n%s\n' "$frontend_order" >&2
   exit 1
 fi
+
+repair_bin_dir="$tmp/repair-bin"
+repair_cache="$tmp/repair-cache"
+repair_session_dir="$repair_cache/zellij/contract_version_1/session_info/fresh-session"
+mkdir -p "$repair_bin_dir" "$repair_session_dir"
+cp "$zellij_dir/bin/zellij-launch-session" "$repair_bin_dir/zellij-launch-session"
+
+cat > "$repair_bin_dir/zellij-session-tab-order" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+
+cat > "$repair_bin_dir/zellij" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "list-sessions" ]]; then
+  exit 0
+fi
+printf '%s\n' "$*" > "${FAKE_ZELLIJ_LAUNCH_ARGS:?}"
+EOF
+
+repair_shell="$tmp/repair-shell"
+cat > "$repair_shell" <<'EOF'
+#!/usr/bin/env sh
+exit 0
+EOF
+chmod +x "$repair_bin_dir"/* "$repair_shell"
+
+printf 'pane command="/missing/zsh"\n' > "$repair_session_dir/session-layout.kdl"
+printf 'command "/missing/zsh"\n' > "$repair_session_dir/session-metadata.kdl"
+printf 'layout {}\n' > "$tmp/layout.kdl"
+
+PATH="$repair_bin_dir:$PATH" \
+HOME="$tmp/home" \
+XDG_CACHE_HOME="$repair_cache" \
+SHELL="$repair_shell" \
+ZELLIJ= \
+ZELLIJ_REPAIR_BROKEN_SHELL=/missing/zsh \
+FAKE_ZELLIJ_LAUNCH_ARGS="$tmp/repair-launch-args.txt" \
+  "$repair_bin_dir/zellij-launch-session" "$tmp/layout.kdl" fresh-session /workspace editor scratch
+
+if grep -F '/missing/zsh' "$repair_session_dir/session-layout.kdl" "$repair_session_dir/session-metadata.kdl" >/dev/null; then
+  printf 'Expected saved session shell paths to be repaired\n' >&2
+  exit 1
+fi
+
+if ! grep -F "$repair_shell" "$repair_session_dir/session-layout.kdl" "$repair_session_dir/session-metadata.kdl" >/dev/null; then
+  printf 'Expected saved session shell paths to use current shell\n' >&2
+  exit 1
+fi
+
+repair_launch_args="$(cat "$tmp/repair-launch-args.txt")"
+expected_repair_launch_args="--layout $tmp/layout.kdl attach --force-run-commands fresh-session --create"
+if [[ "$repair_launch_args" != "$expected_repair_launch_args" ]]; then
+  printf 'Unexpected repair launch args:\n%s\n' "$repair_launch_args" >&2
+  exit 1
+fi

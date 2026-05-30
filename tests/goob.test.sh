@@ -27,7 +27,12 @@ if [[ "${1:-}" == "list-sessions" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "delete-session" ]]; then
-  printf '%s\n' "${2:-}" > "${FAKE_ZELLIJ_DELETED_SESSION:?}"
+  session="${@: -1}"
+  printf '%s\n' "$session" > "${FAKE_ZELLIJ_DELETED_SESSION:?}"
+  if [[ "$*" != *"--force"* ]]; then
+    printf 'expected force delete\n' >&2
+    exit 1
+  fi
   exit 0
 fi
 exit 0
