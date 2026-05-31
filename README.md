@@ -68,7 +68,7 @@ goob frontend -s sketch-api -r /custom/workspace/path
 ### 4. Visibility And Management
 
 ```bash
-goob ls           # List available workspaces in the current project
+goob list         # List available workspaces in the current project
 goob ps           # List running Zellij sessions
 goob kill <name>  # Kill a specific session
 goob rename <old> <new>

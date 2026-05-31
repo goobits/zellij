@@ -84,7 +84,7 @@ HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
 
 listed="$(
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
-    "$tmp/home/.local/bin/goob" ls --config "$profile_dir"
+    "$tmp/home/.local/bin/goob" list --config "$profile_dir"
 )"
 expected_list=$'backend\nextra\nfrontend'
 if [[ "$listed" != "$expected_list" ]]; then

@@ -137,10 +137,10 @@ fi
 listed="$(
   cd "$project"
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
-    "$tmp/home/.local/bin/goob" ls
+    "$tmp/home/.local/bin/goob" list
 )"
 if [[ "$listed" != $'frontend\nmain\nservices' ]]; then
-  printf 'Unexpected goob ls output:\n%s\n' "$listed" >&2
+  printf 'Unexpected goob list output:\n%s\n' "$listed" >&2
   exit 1
 fi
 
