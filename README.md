@@ -36,8 +36,11 @@ goob frontend=app,ui,tools
 # Rename a workspace
 goob rename frontend app-ui
 
-# Add or replace a workspace in an existing project, then open it
+# Add or replace a workspace in an existing project
 goob backend=infra,api,db
+
+# Open the workspace when you want a shell
+goob backend
 ```
 
 ### 3. Daily Usage
@@ -52,7 +55,7 @@ goob
 # Open a specific workspace
 goob frontend
 
-# Create, add, or replace a local workspace and open it
+# Create, add, or replace a local workspace, then sync a matching session
 goob now=tools,components,scratch
 
 # Open a workspace in a named session

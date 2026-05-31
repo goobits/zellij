@@ -15,7 +15,7 @@ usage:
   goob ps
   goob kill <session>
   goob rename <workspace> <new-workspace>
-  goob <workspace>=<tab>,...   # create, add, or replace a local workspace, then open it
+  goob <workspace>=<tab>,...   # create, add, replace, and sync a local workspace
   goob <workspace> [-s <session>] [-r <root>]
 EOF
 }
@@ -259,6 +259,20 @@ parse_tabs_csv() {
   done
 }
 
+sync_workspace_session() {
+  local config_dir="$1" workspace="$2" tab_order_helper="$script_dir/zellij-session-tab-order"
+  local tab_order=() default_cwd
+
+  [[ -x "$tab_order_helper" ]] || return 0
+  mapfile -t tab_order < "$config_dir/$workspace.tabs"
+  [[ "${#tab_order[@]}" -gt 0 ]] || return 0
+
+  default_cwd="$(profile_value "$config_dir/profile.conf" root "${PWD:-/workspace}")"
+  ZELLIJ_SESSION_TAB_DEFAULT_CWD="$default_cwd" \
+  ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 \
+    "$tab_order_helper" "$workspace" "${tab_order[@]}"
+}
+
 upsert_local_workspace() {
   local spec="$1" workspace tabs_csv config_dir profile_name root created=false
 
@@ -292,12 +306,12 @@ upsert_local_workspace() {
     add_profile_workspace "$config_dir/profile.conf" "$workspace"
   fi
   install_profile "$config_dir" >/dev/null
+  sync_workspace_session "$config_dir" "$workspace"
   if [[ "$created" == "true" ]]; then
-    printf 'Created profile and installed workspace %s.\n' "$workspace"
+    printf 'Created profile and synced workspace %s.\n' "$workspace"
   else
-    printf 'Installed workspace %s.\n' "$workspace"
+    printf 'Synced workspace %s.\n' "$workspace"
   fi
-  run_launch "$workspace"
 }
 
 replace_profile_workspace() {

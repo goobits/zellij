@@ -24,6 +24,14 @@ fi
 if [[ "${1:-}" == "list-sessions" ]]; then
   exit 0
 fi
+if [[ "${1:-}" == "attach" || "${1:-}" == "--layout" ]]; then
+  printf 'workspace assignment must not attach or create a zellij client\n' >&2
+  exit 1
+fi
+if [[ "${1:-}" == "action" && "${2:-}" == "switch-session" ]]; then
+  printf 'workspace assignment must not switch zellij sessions\n' >&2
+  exit 1
+fi
 exit 0
 EOF
 chmod +x "$tmp/fake-bin/zellij"
@@ -70,7 +78,7 @@ if [[ ! -f "$tmp/home/.local/share/zellij-workspaces/profiles/my-site/main.tabs"
 fi
 
 if [[ "$(cat "$tmp/main-order.txt")" != $'main\napp\nserver\ninfra\nscratch' ]]; then
-  printf 'Unexpected main launch order:\n%s\n' "$(cat "$tmp/main-order.txt")" >&2
+  printf 'Unexpected main sync order:\n%s\n' "$(cat "$tmp/main-order.txt")" >&2
   exit 1
 fi
 
