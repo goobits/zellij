@@ -36,7 +36,7 @@ is_busy_title() {
   local first_char="${pane_title:0:1}"
 
   case "$first_char" in
-    ⠋ | ⠙ | ⠹ | ⠸ | ⠼ | ⠴ | ⠦ | ⠧ | ⠇ | ⠏)
+    ⠂ | ⠐ | ⠋ | ⠙ | ⠹ | ⠸ | ⠼ | ⠴ | ⠦ | ⠧ | ⠇ | ⠏)
       return 0
       ;;
   esac
@@ -47,7 +47,7 @@ is_busy_title() {
 is_known_agent_title() {
   local pane_title="${1:-}"
 
-  [[ "$pane_title" =~ (^|[[:space:]/])(claude|gemini|codex)([[:space:]]|$) ]]
+  [[ "${pane_title,,}" =~ (^|[[:space:]/])(claude|gemini|codex)([[:space:]]|$) ]]
 }
 
 is_busy_screen() {

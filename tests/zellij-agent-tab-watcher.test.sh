@@ -43,7 +43,27 @@ cat > "$tabs" <<'EOF'
 EOF
 
 cat > "$panes" <<'EOF'
-1	1	infra	false	claude --permission-mode bypassPermissions
+1	1	infra	false	⠐ Claude Code
+EOF
+
+PATH="$bin_dir:$PATH" \
+XDG_RUNTIME_DIR="$tmp/runtime" \
+ZELLIJ_SESSION_NAME=watcher-test \
+FAKE_ZELLIJ_TABS="$tabs" \
+  "$watcher" --once
+
+claude_spinner_name="$(awk -F '\t' '$1 == 1 { print $4 }' "$tabs")"
+if [[ "$claude_spinner_name" != "infra 🤖" ]]; then
+  printf 'Expected Claude spinner busy marker, got %s\n' "$claude_spinner_name" >&2
+  exit 1
+fi
+
+cat > "$tabs" <<'EOF'
+1	0	true	infra
+EOF
+
+cat > "$panes" <<'EOF'
+1	1	infra	false	✳ Claude Code
 EOF
 
 cat > "$screen_dir/1.txt" <<'EOF'
