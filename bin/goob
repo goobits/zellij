@@ -156,18 +156,25 @@ list_workspaces() {
 }
 
 workspace_exists_or_exit() {
-  local profile_dir="$1" workspace="$2" available
+  local profile_dir="$1" workspace="$2" available local_tabs
 
   if [[ -f "$profile_dir/$workspace.tabs" ]]; then
     return
   fi
 
-  printf 'goob: missing workspace %s in %s\n' "$workspace" "$profile_dir" >&2
+  printf 'goob: workspace not found: %s\n' "$workspace" >&2
+  printf 'Looked in: %s\n' "$profile_dir" >&2
   available="$(list_workspaces "$profile_dir")"
   if [[ -n "$available" ]]; then
     printf 'Available workspaces:\n%s\n' "$available" >&2
   else
     printf 'No workspaces are installed for this profile.\n' >&2
+  fi
+  local_tabs="$PWD/config/zellij/$workspace.tabs"
+  if [[ -f "$local_tabs" ]]; then
+    printf 'A local workspace file exists. Refresh with: goob setup --config config/zellij\n' >&2
+  else
+    printf 'Create it with: goob %s=<tab>,...\n' "$workspace" >&2
   fi
   exit 1
 }

@@ -105,7 +105,7 @@ if (
 fi
 
 missing_error="$(cat "$tmp/missing.err")"
-expected_missing_error=$'goob: missing workspace frtonend in '"$tmp/home/.local/share/zellij-workspaces/profiles/my-site"$'\nAvailable workspaces:\nbackend\nextra\nfrontend'
+expected_missing_error=$'goob: workspace not found: frtonend\nLooked in: '"$tmp/home/.local/share/zellij-workspaces/profiles/my-site"$'\nAvailable workspaces:\nbackend\nextra\nfrontend\nCreate it with: goob frtonend=<tab>,...'
 if [[ "$missing_error" != "$expected_missing_error" ]]; then
   printf 'Unexpected missing workspace error:\n%s\n' "$missing_error" >&2
   exit 1
