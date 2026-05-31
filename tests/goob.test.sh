@@ -146,6 +146,32 @@ if [[ "$extra_order" != "$expected_extra_order" ]]; then
   exit 1
 fi
 
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/now-order.txt" \
+    "$tmp/home/.local/bin/goob" now=tools,components,scratch >/dev/null
+)
+
+now_order="$(cat "$tmp/now-order.txt")"
+expected_now_order=$'now\ntools\ncomponents\nscratch'
+if [[ "$now_order" != "$expected_now_order" ]]; then
+  printf 'Unexpected now workspace order:\n%s\n' "$now_order" >&2
+  exit 1
+fi
+
+if [[ "$(cat "$profile_dir/now.tabs")" != $'tools\ncomponents\nscratch' ]]; then
+  printf 'Unexpected local now.tabs:\n%s\n' "$(cat "$profile_dir/now.tabs")" >&2
+  exit 1
+fi
+
+if ! grep -Fxq 'default_workspaces=frontend backend extra now' "$profile_dir/profile.conf"; then
+  printf 'Expected now in default_workspaces:\n%s\n' "$(cat "$profile_dir/profile.conf")" >&2
+  exit 1
+fi
+
 sessions="$(
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" ps

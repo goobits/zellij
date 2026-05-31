@@ -3,20 +3,19 @@ set -euo pipefail
 
 command_name="${1:-}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-default_tabs=(app server infra scratch)
 
 usage() {
   cat <<'EOF' >&2
 usage:
   goob
   goob install
-  goob init [--force] [--name <profile>] [--root <path>] [<tab>...]
-  goob init [--force] [--name <profile>] [--root <path>] <workspace>=<tab>,...
   goob setup --config <profile-dir>
   goob doctor [--config <profile-dir>]
   goob ls [--config <profile-dir>]
   goob ps
   goob kill <session>
+  goob rename <workspace> <new-workspace>
+  goob <workspace>=<tab>,...   # create, add, or replace a local workspace, then open it
   goob <workspace> [-s <session>] [-r <root>]
 EOF
 }
@@ -200,6 +199,43 @@ write_tabs_file() {
   done
 }
 
+add_profile_workspace() {
+  local config_file="$1" workspace="$2" tmp default_workspaces current seen=false
+
+  default_workspaces="$(profile_value "$config_file" default_workspaces "")"
+  for current in $default_workspaces; do
+    if [[ "$current" == "$workspace" ]]; then
+      seen=true
+      break
+    fi
+  done
+
+  if [[ "$seen" == "true" ]]; then
+    return
+  fi
+
+  if [[ -n "$default_workspaces" ]]; then
+    default_workspaces="$default_workspaces $workspace"
+  else
+    default_workspaces="$workspace"
+  fi
+
+  tmp="$(mktemp)"
+  awk -F '=' -v default_workspaces="$default_workspaces" '
+    $1 == "default_workspaces" {
+      print "default_workspaces=" default_workspaces
+      updated = 1
+      next
+    }
+    { print }
+    END {
+      if (!updated) print "default_workspaces=" default_workspaces
+    }
+  ' "$config_file" > "$tmp"
+  cat "$tmp" > "$config_file"
+  rm -f "$tmp"
+}
+
 parse_tabs_csv() {
   local csv="$1" tab
   IFS=',' read -r -a parsed_tabs <<<"$csv"
@@ -212,99 +248,139 @@ parse_tabs_csv() {
       printf 'goob: empty tab name in %s\n' "$csv" >&2
       exit 2
     fi
+    validate_name tab "$tab"
   done
 }
 
-init_config() {
-  local force=false profile_name="" root_arg="$PWD" config_dir="$PWD/config/zellij"
-  local specs=() workspaces=() first_workspace workspace tabs_csv tab
-  local has_assignment=false has_plain_tabs=false
+upsert_local_workspace() {
+  local spec="$1" workspace tabs_csv config_dir profile_name root created=false
 
-  while [[ "$#" -gt 0 ]]; do
-    case "$1" in
-      --force)
-        force=true
-        shift
-        ;;
-      --name)
-        profile_name="${2:-}"
-        shift 2
-        ;;
-      --root | -r)
-        root_arg="${2:-}"
-        shift 2
-        ;;
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      -*)
-        printf 'goob: unknown init option %s\n' "$1" >&2
-        usage
-        exit 2
-        ;;
-      *)
-        specs+=("$1")
-        if [[ "$1" == *"="* ]]; then
-          has_assignment=true
-        else
-          has_plain_tabs=true
-        fi
-        shift
-        ;;
-    esac
-  done
-
-  profile_name="${profile_name:-$(basename "$PWD")}"
-  validate_name profile "$profile_name"
-  root="$(resolve_root "$root_arg")"
-
-  if [[ "$has_assignment" == "true" && "$has_plain_tabs" == "true" ]]; then
-    printf 'goob: do not mix workspace=tab,tab specs with plain tab names\n' >&2
+  workspace="${spec%%=*}"
+  tabs_csv="${spec#*=}"
+  if [[ -z "$workspace" || -z "$tabs_csv" || "$workspace" == "$spec" ]]; then
+    printf 'goob: expected workspace=tab,tab, got %s\n' "$spec" >&2
     exit 2
   fi
 
-  if [[ -e "$config_dir" && "$force" != "true" ]]; then
-    printf 'goob: %s already exists; pass --force to overwrite it\n' "$config_dir" >&2
+  validate_name workspace "$workspace"
+  parse_tabs_csv "$tabs_csv"
+  if ! config_dir="$(find_config_dir)"; then
+    config_dir="${GOOB_CONFIG_DIR:-$PWD/config/zellij}"
+    install -d "$config_dir"
+    config_dir="$(cd -- "$config_dir" && pwd)"
+    profile_name="$(basename "$PWD")"
+    validate_name profile "$profile_name"
+    root="$(resolve_root "$PWD")"
+    {
+      printf 'name=%s\n' "$profile_name"
+      printf 'root=%s\n' "$root"
+      printf 'default_workspace=%s\n' "$workspace"
+      printf 'default_workspaces=%s\n' "$workspace"
+    } > "$config_dir/profile.conf"
+    created=true
+  fi
+
+  write_tabs_file "$config_dir" "$workspace" "${parsed_tabs[@]}"
+  if [[ "$created" != "true" ]]; then
+    add_profile_workspace "$config_dir/profile.conf" "$workspace"
+  fi
+  install_profile "$config_dir" >/dev/null
+  if [[ "$created" == "true" ]]; then
+    printf 'Created profile and installed workspace %s.\n' "$workspace"
+  else
+    printf 'Installed workspace %s.\n' "$workspace"
+  fi
+  run_launch "$workspace"
+}
+
+replace_profile_workspace() {
+  local config_file="$1" old_workspace="$2" new_workspace="$3"
+  local default_workspace default_workspaces current rewritten="" emitted=" " found=false tmp
+
+  default_workspace="$(profile_value "$config_file" default_workspace "")"
+  if [[ "$default_workspace" == "$old_workspace" ]]; then
+    default_workspace="$new_workspace"
+  fi
+
+  default_workspaces="$(profile_value "$config_file" default_workspaces "")"
+  for current in $default_workspaces; do
+    if [[ "$current" == "$old_workspace" ]]; then
+      current="$new_workspace"
+      found=true
+    fi
+
+    case "$emitted" in
+      *" $current "*)
+        continue
+        ;;
+    esac
+
+    if [[ -n "$rewritten" ]]; then
+      rewritten="$rewritten $current"
+    else
+      rewritten="$current"
+    fi
+    emitted="$emitted$current "
+  done
+
+  if [[ "$found" != "true" ]]; then
+    if [[ -n "$rewritten" ]]; then
+      rewritten="$rewritten $new_workspace"
+    else
+      rewritten="$new_workspace"
+    fi
+  fi
+
+  tmp="$(mktemp)"
+  awk -F '=' -v default_workspace="$default_workspace" -v default_workspaces="$rewritten" '
+    $1 == "default_workspace" {
+      print "default_workspace=" default_workspace
+      wrote_default_workspace = 1
+      next
+    }
+    $1 == "default_workspaces" {
+      print "default_workspaces=" default_workspaces
+      wrote_default_workspaces = 1
+      next
+    }
+    { print }
+    END {
+      if (!wrote_default_workspace) print "default_workspace=" default_workspace
+      if (!wrote_default_workspaces) print "default_workspaces=" default_workspaces
+    }
+  ' "$config_file" > "$tmp"
+  cat "$tmp" > "$config_file"
+  rm -f "$tmp"
+}
+
+rename_local_workspace() {
+  local old_workspace="$1" new_workspace="$2" config_dir old_tabs new_tabs
+
+  validate_name workspace "$old_workspace"
+  validate_name workspace "$new_workspace"
+
+  if config_dir="$(find_config_dir)"; then
+    :
+  else
+    printf 'goob: could not find config/zellij; create a workspace first\n' >&2
     exit 1
   fi
 
-  rm -rf "$config_dir"
-  install -d "$config_dir"
-
-  if (( ${#specs[@]} == 0 )); then
-    workspace="main"
-    workspaces=("$workspace")
-    write_tabs_file "$config_dir" "$workspace" "${default_tabs[@]}"
-  elif [[ "$has_plain_tabs" == "true" ]]; then
-    workspace="main"
-    workspaces=("$workspace")
-    write_tabs_file "$config_dir" "$workspace" "${specs[@]}"
-  else
-    for spec in "${specs[@]}"; do
-      workspace="${spec%%=*}"
-      tabs_csv="${spec#*=}"
-      if [[ -z "$workspace" || -z "$tabs_csv" || "$workspace" == "$spec" ]]; then
-        printf 'goob: expected workspace=tab,tab, got %s\n' "$spec" >&2
-        exit 2
-      fi
-      parse_tabs_csv "$tabs_csv"
-      workspaces+=("$workspace")
-      write_tabs_file "$config_dir" "$workspace" "${parsed_tabs[@]}"
-    done
+  old_tabs="$config_dir/$old_workspace.tabs"
+  new_tabs="$config_dir/$new_workspace.tabs"
+  if [[ ! -f "$old_tabs" ]]; then
+    printf 'goob: missing workspace %s in %s\n' "$old_workspace" "$config_dir" >&2
+    exit 1
+  fi
+  if [[ -e "$new_tabs" ]]; then
+    printf 'goob: workspace already exists: %s\n' "$new_workspace" >&2
+    exit 1
   fi
 
-  first_workspace="${workspaces[0]}"
-  {
-    printf 'name=%s\n' "$profile_name"
-    printf 'root=%s\n' "$root"
-    printf 'default_workspace=%s\n' "$first_workspace"
-    printf 'default_workspaces=%s\n' "${workspaces[*]}"
-  } > "$config_dir/profile.conf"
-
-  install_profile "$config_dir"
-  printf 'Created and installed Zellij profile %s at %s.\n' "$profile_name" "$config_dir"
-  printf 'Run: goob %s\n' "$first_workspace"
+  mv "$old_tabs" "$new_tabs"
+  replace_profile_workspace "$config_dir/profile.conf" "$old_workspace" "$new_workspace"
+  install_profile "$config_dir" >/dev/null
+  printf 'Renamed workspace %s to %s.\n' "$old_workspace" "$new_workspace"
 }
 
 run_install() {
@@ -394,10 +470,6 @@ case "$command_name" in
     fi
     run_install
     ;;
-  init)
-    shift
-    init_config "$@"
-    ;;
   setup)
     shift
     config_dir="$(resolve_config_arg "$@")"
@@ -446,7 +518,25 @@ case "$command_name" in
     validate_name session "$session"
     exec zellij delete-session --force "$session"
     ;;
+  rename)
+    shift
+    if [[ "$#" -ne 2 ]]; then
+      printf 'goob: rename requires old and new workspace names\n' >&2
+      usage
+      exit 2
+    fi
+    rename_local_workspace "$1" "$2"
+    ;;
   *)
-    run_launch "$command_name" "${@:2}"
+    if [[ "$command_name" == *"="* ]]; then
+      if [[ "$#" -ne 1 ]]; then
+        printf 'goob: workspace=tab,tab does not accept extra launch arguments\n' >&2
+        usage
+        exit 2
+      fi
+      upsert_local_workspace "$command_name"
+    else
+      run_launch "$command_name" "${@:2}"
+    fi
     ;;
 esac

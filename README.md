@@ -21,23 +21,23 @@ Install the shared tooling once. From this repository directory, run:
 If `zellij` is missing, this downloads pinned Zellij `0.44.3` for your
 architecture. Set `ZELLIJ_INSTALL_BINARY=0` to skip binary installation.
 
-### 2. Scaffold A Project
+### 2. Create A Workspace
 
-In any project directory, use `goob init` to generate a default Zellij profile at
-`config/zellij/`.
+In any project directory, assign a workspace name to a comma-separated tab list.
+If `config/zellij/` does not exist, `goob` creates the profile first.
 
 ```bash
-# Sane defaults: one workspace named main with app, server, infra, scratch
-goob init
+# Create a project profile with one workspace named main
+goob main=app,server,infra,scratch
 
-# Custom tabs for one workspace
-goob init app server infra docs
+# Add another workspace
+goob frontend=app,ui,tools
 
-# Multiple workspaces
-goob init frontend=app,ui,tools backend=infra,api,db
+# Rename a workspace
+goob rename frontend app-ui
 
-# Overwrite existing config/zellij safely
-goob init --force frontend=app,ui backend=infra,api
+# Add or replace a workspace in an existing project, then open it
+goob backend=infra,api,db
 ```
 
 ### 3. Daily Usage
@@ -51,6 +51,9 @@ goob
 
 # Open a specific workspace
 goob frontend
+
+# Create, add, or replace a local workspace and open it
+goob now=tools,components,scratch
 
 # Open a workspace in a named session
 goob frontend -s sketch-api
@@ -68,6 +71,7 @@ goob frontend -s sketch-api -r /custom/workspace/path
 goob ls           # List available workspaces in the current project
 goob ps           # List running Zellij sessions
 goob kill <name>  # Kill a specific session
+goob rename <old> <new>
 goob doctor       # Validate the install and current profile config
 ```
 
@@ -104,7 +108,7 @@ scratch
 `goob <workspace>` works for any `<workspace>.tabs` file. Workspace names such
 as `frontend` and `backend` are conventions, not special cases.
 
-`goob init` defaults to:
+Creating the first workspace writes:
 
 ```text
 name=<current-directory-name>
@@ -210,7 +214,7 @@ bash tests/zellij-launch-session.test.sh
 bash tests/zellij-agent-tab-watcher.test.sh
 bash tests/zellij-session-tab-order.test.sh
 bash tests/zellij-session-specs.test.sh
-bash tests/goob-init.test.sh
+bash tests/goob-create.test.sh
 bash tests/goob.test.sh
 bash tests/zellij-workspace-init.test.sh
 ```

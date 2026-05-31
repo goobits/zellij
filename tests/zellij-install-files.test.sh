@@ -17,7 +17,7 @@ install_output="$(
     "$zellij_dir/install.sh"
 )"
 
-expected_output=$'Installed Zellij workspace setup.\nOpen a new shell or run: export PATH="$HOME/.local/bin:$PATH"\nIn a project directory, create a profile with: goob init\nThen open the workspace with: goob'
+expected_output=$'Installed Zellij workspace setup.\nOpen a new shell or run: export PATH="$HOME/.local/bin:$PATH"\nIn a project directory, create a profile with: goob main=app,server,infra,scratch\nThen open the workspace with: goob'
 if [[ "$install_output" != "$expected_output" ]]; then
   printf 'Unexpected install output:\n%s\n' "$install_output" >&2
   exit 1

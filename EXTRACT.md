@@ -19,7 +19,7 @@ zellij-workspaces/
   examples/
     basic-website/
   tests/
-    goob-init.test.sh
+    goob-create.test.sh
   install.sh
   README.md
 ```
