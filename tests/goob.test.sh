@@ -81,6 +81,12 @@ if [[ "${1:-}" == "action" ]]; then
       awk -F '\t' -v target="$target" 'BEGIN { OFS = FS } { $3 = ($1 == target ? "true" : "false"); print }' "$state" > "${state}.next"
       mv "${state}.next" "$state"
       ;;
+    rename-tab-by-id)
+      target="${2:-}"
+      name="${3:-}"
+      awk -F '\t' -v target="$target" -v name="$name" 'BEGIN { OFS = FS } { if ($1 == target) $4 = name; print }' "$state" > "${state}.next"
+      mv "${state}.next" "$state"
+      ;;
     move-tab)
       direction="${2:-}"
       [[ "$direction" == "left" ]] || exit 0
@@ -183,19 +189,14 @@ fi
 : > "$tmp/tabs.tsv"
 : > "$tmp/tabs.tsv.panes"
 
-(
+naked_help="$(
   cd "$tmp/project"
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
-  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-  FAKE_ZELLIJ_ORDER_ARGS="$tmp/default-order.txt" \
-    "$tmp/home/.local/bin/goob"
-)
-
-default_order="$(cat "$tmp/default-order.txt")"
-expected_default_order=$'frontend\napp\nui\nscratch'
-if [[ "$default_order" != "$expected_default_order" ]]; then
-  printf 'Unexpected default workspace order:\n%s\n' "$default_order" >&2
+    "$tmp/home/.local/bin/goob" 2>&1
+)"
+if [[ "$naked_help" != usage:$'\n'* ]]; then
+  printf 'Expected naked goob to show usage:\n%s\n' "$naked_help" >&2
   exit 1
 fi
 
@@ -307,11 +308,11 @@ fi
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-    "$tmp/home/.local/bin/goob" front focus keyboard >/dev/null
+    "$tmp/home/.local/bin/goob" front refresh >/dev/null
 )
 
-if [[ "$(awk -F '\t' '$3 == "true" { print $4 }' "$tmp/tabs.tsv")" != "keyboard 🔔" ]]; then
-  printf 'Expected keyboard tab to be focused:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+if [[ "$(awk -F '\t' '{ print $4 }' "$tmp/tabs.tsv")" != $'tools 🤖\nkeyboard\nsearch\ncomponents\nskills' ]]; then
+  printf 'Expected front refresh to repair live titles:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
   exit 1
 fi
 
@@ -320,7 +321,31 @@ fi
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-    "$tmp/home/.local/bin/goob" front remove keyboard >/dev/null
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-rename-order.txt" \
+    "$tmp/home/.local/bin/goob" front rename keyboard keys >/dev/null
+)
+
+if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nkeys\nsearch\ncomponents\nskills\nscratch' ]]; then
+  printf 'Unexpected front tabs after rename:\n%s\n' "$(cat "$profile_dir/front.tabs")" >&2
+  exit 1
+fi
+
+if [[ "$(cat "$tmp/front-rename-order.txt")" != $'front\ntools\nkeys\nsearch\ncomponents\nskills\nscratch' ]]; then
+  printf 'Unexpected front rename sync order:\n%s\n' "$(cat "$tmp/front-rename-order.txt")" >&2
+  exit 1
+fi
+
+if [[ "$(awk -F '\t' '{ print $4 }' "$tmp/tabs.tsv")" != $'tools 🤖\nkeys\nsearch\ncomponents\nskills' ]]; then
+  printf 'Expected front rename to refresh live titles:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/goob" front remove keys >/dev/null
 )
 
 if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nskills\nscratch' ]]; then
@@ -328,8 +353,8 @@ if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nskills\
   exit 1
 fi
 
-if grep -q 'keyboard' "$tmp/tabs.tsv"; then
-  printf 'Expected keyboard live tab to be closed:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+if grep -q 'keys' "$tmp/tabs.tsv"; then
+  printf 'Expected keys live tab to be closed:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
   exit 1
 fi
 

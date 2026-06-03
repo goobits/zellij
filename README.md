@@ -88,8 +88,9 @@ goob front list
 goob front add keyboard
 goob front add keyboard@1
 goob front remove keyboard
-goob front focus keyboard
 goob front move keyboard@1
+goob front rename keyboard keys
+goob front refresh
 ```
 
 ## 📁 How Profiles Work
