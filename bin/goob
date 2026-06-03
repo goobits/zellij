@@ -15,6 +15,11 @@ usage:
   goob ps
   goob kill <session>
   goob rename <workspace> <new-workspace>
+  goob <workspace> list
+  goob <workspace> add <tab[@index]>
+  goob <workspace> remove <tab>
+  goob <workspace> focus <tab>
+  goob <workspace> move <tab@index>
   goob <workspace>=<tab>,...   # create, add, replace, and sync a local workspace
   goob <workspace> [-s <session>] [-r <root>]
 EOF
@@ -271,6 +276,245 @@ sync_workspace_session() {
   ZELLIJ_SESSION_TAB_DEFAULT_CWD="$default_cwd" \
   ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 \
     "$tab_order_helper" "$workspace" "${tab_order[@]}"
+}
+
+tab_name_from_line() {
+  local line="$1"
+  printf '%s' "${line%%$'\t'*}"
+}
+
+indexed_tab_spec() {
+  local spec="$1"
+  tab_name="$spec"
+  tab_index=""
+
+  if [[ "$spec" =~ ^(.+)@([0-9]+)$ ]]; then
+    tab_name="${BASH_REMATCH[1]}"
+    tab_index="${BASH_REMATCH[2]}"
+  fi
+
+  validate_name tab "$tab_name"
+}
+
+write_tab_lines() {
+  local target_file="$1"
+  shift
+
+  : > "$target_file"
+  for line in "$@"; do
+    printf '%s\n' "$line" >> "$target_file"
+  done
+}
+
+upsert_workspace_tab_line() {
+  local tabs_file="$1" spec="$2" existing_line="" line current_name insert_index
+  local current_lines=() next_lines=()
+
+  indexed_tab_spec "$spec"
+  insert_index="$tab_index"
+  mapfile -t current_lines < "$tabs_file"
+
+  for line in "${current_lines[@]}"; do
+    current_name="$(tab_name_from_line "$line")"
+    if [[ "$current_name" == "$tab_name" ]]; then
+      existing_line="$line"
+      continue
+    fi
+    next_lines+=("$line")
+  done
+
+  line="${existing_line:-$tab_name}"
+  if [[ -z "$insert_index" || "$insert_index" -ge "${#next_lines[@]}" ]]; then
+    next_lines+=("$line")
+  else
+    next_lines=("${next_lines[@]:0:$insert_index}" "$line" "${next_lines[@]:$insert_index}")
+  fi
+
+  write_tab_lines "$tabs_file" "${next_lines[@]}"
+}
+
+remove_workspace_tab_line() {
+  local tabs_file="$1" remove_name="$2" line current_name found=false
+  local current_lines=() next_lines=()
+
+  validate_name tab "$remove_name"
+  mapfile -t current_lines < "$tabs_file"
+
+  for line in "${current_lines[@]}"; do
+    current_name="$(tab_name_from_line "$line")"
+    if [[ "$current_name" == "$remove_name" ]]; then
+      found=true
+      continue
+    fi
+    next_lines+=("$line")
+  done
+
+  if [[ "$found" != "true" ]]; then
+    printf 'goob: tab not found in workspace file: %s\n' "$remove_name" >&2
+    exit 1
+  fi
+
+  write_tab_lines "$tabs_file" "${next_lines[@]}"
+}
+
+live_tab_rows() {
+  local session="$1" match_name="${2:-}"
+
+  command -v jq >/dev/null 2>&1 || return 0
+  ZELLIJ_SESSION_NAME="$session" zellij action list-tabs --json 2>/dev/null | jq -r --arg name "$match_name" '
+    def base_name:
+      sub(" 🤖$"; "")
+      | sub(" 🔔$"; "");
+
+    .[]
+    | {
+        id: .tab_id,
+        position: .position,
+        active: .active,
+        name: .name,
+        base: (.name | base_name)
+      }
+    | select($name == "" or .base == $name)
+    | [.id, .position, .active, .base, .name]
+    | @tsv
+  ' 2>/dev/null || true
+}
+
+require_one_live_tab_id() {
+  local session="$1" requested_name="$2" rows=() row
+
+  validate_name tab "$requested_name"
+  mapfile -t rows < <(live_tab_rows "$session" "$requested_name")
+
+  if (( ${#rows[@]} == 0 )); then
+    printf 'goob: live tab not found in session %s: %s\n' "$session" "$requested_name" >&2
+    exit 1
+  fi
+
+  if (( ${#rows[@]} > 1 )); then
+    printf 'goob: tab name is ambiguous in session %s: %s\n' "$session" "$requested_name" >&2
+    printf '%s\n' "${rows[@]}" >&2
+    exit 1
+  fi
+
+  row="${rows[0]}"
+  printf '%s' "${row%%$'\t'*}"
+}
+
+close_live_tab_if_present() {
+  local session="$1" requested_name="$2" rows=() row tab_id
+
+  mapfile -t rows < <(live_tab_rows "$session" "$requested_name")
+  (( ${#rows[@]} > 0 )) || return 0
+
+  if (( ${#rows[@]} > 1 )); then
+    printf 'goob: tab name is ambiguous in session %s: %s\n' "$session" "$requested_name" >&2
+    printf '%s\n' "${rows[@]}" >&2
+    exit 1
+  fi
+
+  row="${rows[0]}"
+  tab_id="${row%%$'\t'*}"
+  ZELLIJ_SESSION_NAME="$session" zellij action close-tab-by-id "$tab_id" >/dev/null 2>&1 || true
+  ZELLIJ_SESSION_NAME="$session" zellij action save-session >/dev/null 2>&1 || true
+}
+
+list_workspace_tabs() {
+  local workspace="$1" tabs_file="$2" rows=() row current_name marker live_count=0
+
+  mapfile -t rows < <(live_tab_rows "$workspace")
+  live_count="${#rows[@]}"
+
+  if (( live_count > 0 )); then
+    for row in "${rows[@]}"; do
+      IFS=$'\t' read -r _tab_id position active current_name _display_name <<<"$row"
+      marker=" "
+      [[ "$active" == "true" ]] && marker="*"
+      printf '%s %s %s\n' "$marker" "$position" "$current_name"
+    done
+    return
+  fi
+
+  awk -F '\t' '{ printf "  %d %s\n", NR - 1, $1 }' "$tabs_file"
+}
+
+run_workspace_tab_command() {
+  local workspace="$1" action="$2" arg="${3:-}" config_dir tabs_file
+
+  validate_name workspace "$workspace"
+  if ! config_dir="$(find_config_dir)"; then
+    printf 'goob: could not find config/zellij; create a workspace first\n' >&2
+    exit 1
+  fi
+
+  tabs_file="$config_dir/$workspace.tabs"
+  if [[ ! -f "$tabs_file" ]]; then
+    printf 'goob: missing workspace %s in %s\n' "$workspace" "$config_dir" >&2
+    exit 1
+  fi
+
+  case "$action" in
+    list)
+      if [[ -n "$arg" || "$#" -ne 2 ]]; then
+        printf 'goob: %s list does not accept extra arguments\n' "$workspace" >&2
+        usage
+        exit 2
+      fi
+      list_workspace_tabs "$workspace" "$tabs_file"
+      ;;
+    add)
+      if [[ -z "$arg" || "$#" -ne 3 ]]; then
+        printf 'goob: %s add requires exactly one tab name\n' "$workspace" >&2
+        usage
+        exit 2
+      fi
+      upsert_workspace_tab_line "$tabs_file" "$arg"
+      install_profile "$config_dir" >/dev/null
+      sync_workspace_session "$config_dir" "$workspace"
+      printf 'Added tab %s to %s.\n' "$tab_name" "$workspace"
+      ;;
+    remove)
+      if [[ -z "$arg" || "$#" -ne 3 ]]; then
+        printf 'goob: %s remove requires exactly one tab name\n' "$workspace" >&2
+        usage
+        exit 2
+      fi
+      remove_workspace_tab_line "$tabs_file" "$arg"
+      install_profile "$config_dir" >/dev/null
+      close_live_tab_if_present "$workspace" "$arg"
+      printf 'Removed tab %s from %s.\n' "$arg" "$workspace"
+      ;;
+    focus)
+      if [[ -z "$arg" || "$#" -ne 3 ]]; then
+        printf 'goob: %s focus requires exactly one tab name\n' "$workspace" >&2
+        usage
+        exit 2
+      fi
+      tab_id="$(require_one_live_tab_id "$workspace" "$arg")"
+      ZELLIJ_SESSION_NAME="$workspace" zellij action go-to-tab-by-id "$tab_id"
+      ;;
+    move)
+      if [[ -z "$arg" || "$#" -ne 3 ]]; then
+        printf 'goob: %s move requires exactly one tab@index spec\n' "$workspace" >&2
+        usage
+        exit 2
+      fi
+      indexed_tab_spec "$arg"
+      if [[ -z "$tab_index" ]]; then
+        printf 'goob: move requires an index, for example %s move %s@1\n' "$workspace" "$tab_name" >&2
+        exit 2
+      fi
+      upsert_workspace_tab_line "$tabs_file" "$arg"
+      install_profile "$config_dir" >/dev/null
+      sync_workspace_session "$config_dir" "$workspace"
+      printf 'Moved tab %s to %s@%s.\n' "$tab_name" "$workspace" "$tab_index"
+      ;;
+    *)
+      printf 'goob: unknown workspace tab action %s\n' "$action" >&2
+      usage
+      exit 2
+      ;;
+  esac
 }
 
 upsert_local_workspace() {
@@ -556,6 +800,8 @@ case "$command_name" in
         exit 2
       fi
       upsert_local_workspace "$command_name"
+    elif [[ "${2:-}" =~ ^(list|add|remove|focus|move)$ ]]; then
+      run_workspace_tab_command "$command_name" "${@:2}"
     else
       run_launch "$command_name" "${@:2}"
     fi

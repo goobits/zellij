@@ -35,6 +35,75 @@ if [[ "${1:-}" == "delete-session" ]]; then
   fi
   exit 0
 fi
+if [[ "${1:-}" == "action" ]]; then
+  state="${FAKE_ZELLIJ_TABS:?}"
+  shift
+  case "${1:-}" in
+    list-tabs)
+      awk -F '\t' '
+        BEGIN { printf "[" }
+        {
+          if (NR > 1) printf ","
+          printf "{\"tab_id\":%s,\"position\":%s,\"active\":%s,\"name\":\"%s\"}", $1, $2, $3, $4
+        }
+        END { printf "]" }
+      ' "$state"
+      ;;
+    list-panes)
+      printf '[]'
+      ;;
+    new-tab)
+      name=""
+      while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+          --name | -n)
+            name="${2:-}"
+            shift 2
+            ;;
+          *)
+            shift
+            ;;
+        esac
+      done
+      next_id="$(awk -F '\t' 'BEGIN { max = -1 } { if ($1 > max) max = $1 } END { print max + 1 }' "$state")"
+      next_position="$(awk 'END { print NR }' "$state")"
+      printf '%s\t%s\tfalse\t%s\n' "$next_id" "$next_position" "$name" >> "$state"
+      ;;
+    close-tab-by-id)
+      target="${2:-}"
+      awk -F '\t' -v target="$target" 'BEGIN { OFS = FS } $1 != target { print }' "$state" > "${state}.next"
+      mv "${state}.next" "$state"
+      awk -F '\t' 'BEGIN { OFS = FS } { $2 = NR - 1; print }' "$state" > "${state}.next"
+      mv "${state}.next" "$state"
+      ;;
+    go-to-tab-by-id)
+      target="${2:-}"
+      awk -F '\t' -v target="$target" 'BEGIN { OFS = FS } { $3 = ($1 == target ? "true" : "false"); print }' "$state" > "${state}.next"
+      mv "${state}.next" "$state"
+      ;;
+    move-tab)
+      direction="${2:-}"
+      [[ "$direction" == "left" ]] || exit 0
+      active_position="$(awk -F '\t' '$3 == "true" { print $2 }' "$state")"
+      [[ "$active_position" =~ ^[0-9]+$ ]] || exit 0
+      if (( active_position == 0 )); then
+        exit 0
+      fi
+      previous_position=$((active_position - 1))
+      awk -F '\t' -v active="$active_position" -v previous="$previous_position" '
+        BEGIN { OFS = FS }
+        $2 == active { $2 = previous; print; next }
+        $2 == previous { $2 = active; print; next }
+        { print }
+      ' "$state" > "${state}.next"
+      mv "${state}.next" "$state"
+      ;;
+    save-session)
+      touch "${state}.saved"
+      ;;
+  esac
+  exit 0
+fi
 exit 0
 EOF
 chmod +x "$tmp/fake-bin/zellij"
@@ -169,6 +238,98 @@ fi
 
 if ! grep -Fxq 'default_workspaces=frontend backend extra now' "$profile_dir/profile.conf"; then
   printf 'Expected now in default_workspaces:\n%s\n' "$(cat "$profile_dir/profile.conf")" >&2
+  exit 1
+fi
+
+cat > "$profile_dir/front.tabs" <<'EOF'
+tools
+components
+keyboard
+skills
+scratch
+EOF
+
+cat > "$tmp/tabs.tsv" <<'EOF'
+0	0	false	tools 🤖
+1	1	false	components 🤖
+2	2	false	keyboard 🔔
+3	3	true	skills 🤖
+4	4	false	scratch 🤖
+EOF
+
+front_list="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/goob" front list
+)"
+if [[ "$front_list" != $'  0 tools\n  1 components\n  2 keyboard\n* 3 skills\n  4 scratch' ]]; then
+  printf 'Unexpected front list output:\n%s\n' "$front_list" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-add-order.txt" \
+    "$tmp/home/.local/bin/goob" front add search@1 >/dev/null
+)
+
+if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nkeyboard\nskills\nscratch' ]]; then
+  printf 'Unexpected front tabs after add:\n%s\n' "$(cat "$profile_dir/front.tabs")" >&2
+  exit 1
+fi
+
+if [[ "$(cat "$tmp/front-add-order.txt")" != $'front\ntools\nsearch\ncomponents\nkeyboard\nskills\nscratch' ]]; then
+  printf 'Unexpected front add sync order:\n%s\n' "$(cat "$tmp/front-add-order.txt")" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-move-order.txt" \
+    "$tmp/home/.local/bin/goob" front move keyboard@1 >/dev/null
+)
+
+if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nkeyboard\nsearch\ncomponents\nskills\nscratch' ]]; then
+  printf 'Unexpected front tabs after move:\n%s\n' "$(cat "$profile_dir/front.tabs")" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/goob" front focus keyboard >/dev/null
+)
+
+if [[ "$(awk -F '\t' '$3 == "true" { print $4 }' "$tmp/tabs.tsv")" != "keyboard 🔔" ]]; then
+  printf 'Expected keyboard tab to be focused:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/goob" front remove keyboard >/dev/null
+)
+
+if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nskills\nscratch' ]]; then
+  printf 'Unexpected front tabs after remove:\n%s\n' "$(cat "$profile_dir/front.tabs")" >&2
+  exit 1
+fi
+
+if grep -q 'keyboard' "$tmp/tabs.tsv"; then
+  printf 'Expected keyboard live tab to be closed:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
   exit 1
 fi
 

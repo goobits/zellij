@@ -78,6 +78,20 @@ goob rename <old> <new>
 goob doctor       # Validate the install and current profile config
 ```
 
+### 5. Live Tab Management
+
+Workspace names can also manage their live Zellij tabs. Indexed tab specs use
+zero-based positions, so `keyboard@1` places `keyboard` at the second tab.
+
+```bash
+goob front list
+goob front add keyboard
+goob front add keyboard@1
+goob front remove keyboard
+goob front focus keyboard
+goob front move keyboard@1
+```
+
 ## 📁 How Profiles Work
 
 A profile is a directory of inert config data that `goob` reads to build your
