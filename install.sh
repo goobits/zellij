@@ -190,4 +190,4 @@ if ! original_path_has_local_bin; then
   printf 'Open a new shell or run: export PATH="$HOME/.local/bin:$PATH"\n'
 fi
 printf 'In a project directory, create a profile with: goob main=app,server,infra,scratch\n'
-printf 'Then open the workspace with: goob\n'
+printf 'Then open a workspace with: goob main\n'

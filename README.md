@@ -49,7 +49,7 @@ When a project has `config/zellij/`, `goob` auto-detects it. You do not need to
 manually link or install profiles for normal repos.
 
 ```bash
-# Open the default workspace
+# Show available commands
 goob
 
 # Open a specific workspace
