@@ -36,6 +36,9 @@ goob frontend=app,ui,tools
 # Rename a workspace
 goob rename frontend app-ui
 
+# Remove a workspace
+goob remove app-ui
+
 # Add or replace a workspace in an existing project
 goob backend=infra,api,db
 
@@ -75,6 +78,7 @@ goob list         # List available workspaces in the current project
 goob ps           # List running Zellij sessions
 goob kill <name>  # Kill a specific session
 goob rename <old> <new>
+goob remove <workspace>
 goob doctor       # Validate the install and current profile config
 ```
 

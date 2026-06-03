@@ -15,6 +15,7 @@ usage:
   goob ps
   goob kill <session>
   goob rename <workspace> <new-workspace>
+  goob remove <workspace>
   goob <workspace> list
   goob <workspace> add <tab[@index]>
   goob <workspace> remove <tab>
@@ -671,6 +672,63 @@ replace_profile_workspace() {
   rm -f "$tmp"
 }
 
+remove_profile_workspace() {
+  local config_file="$1" remove_workspace="$2"
+  local default_workspace default_workspaces current rewritten="" emitted=" " found=false tmp
+
+  default_workspace="$(profile_value "$config_file" default_workspace "")"
+  default_workspaces="$(profile_value "$config_file" default_workspaces "")"
+
+  for current in $default_workspaces; do
+    if [[ "$current" == "$remove_workspace" ]]; then
+      found=true
+      continue
+    fi
+
+    case "$emitted" in
+      *" $current "*)
+        continue
+        ;;
+    esac
+
+    if [[ -n "$rewritten" ]]; then
+      rewritten="$rewritten $current"
+    else
+      rewritten="$current"
+    fi
+    emitted="$emitted$current "
+  done
+
+  if [[ "$found" != "true" && "$default_workspace" != "$remove_workspace" ]]; then
+    return 0
+  fi
+
+  if [[ "$default_workspace" == "$remove_workspace" ]]; then
+    default_workspace="${rewritten%% *}"
+  fi
+
+  tmp="$(mktemp)"
+  awk -F '=' -v default_workspace="$default_workspace" -v default_workspaces="$rewritten" '
+    $1 == "default_workspace" {
+      print "default_workspace=" default_workspace
+      wrote_default_workspace = 1
+      next
+    }
+    $1 == "default_workspaces" {
+      print "default_workspaces=" default_workspaces
+      wrote_default_workspaces = 1
+      next
+    }
+    { print }
+    END {
+      if (!wrote_default_workspace) print "default_workspace=" default_workspace
+      if (!wrote_default_workspaces) print "default_workspaces=" default_workspaces
+    }
+  ' "$config_file" > "$tmp"
+  cat "$tmp" > "$config_file"
+  rm -f "$tmp"
+}
+
 rename_local_workspace() {
   local old_workspace="$1" new_workspace="$2" config_dir old_tabs new_tabs
 
@@ -699,6 +757,39 @@ rename_local_workspace() {
   replace_profile_workspace "$config_dir/profile.conf" "$old_workspace" "$new_workspace"
   install_profile "$config_dir" >/dev/null
   printf 'Renamed workspace %s to %s.\n' "$old_workspace" "$new_workspace"
+}
+
+remove_local_workspace() {
+  local workspace="$1" config_dir tabs_file tabs_count tabs_files=()
+
+  validate_name workspace "$workspace"
+
+  if config_dir="$(find_config_dir)"; then
+    :
+  else
+    printf 'goob: could not find config/zellij; create a workspace first\n' >&2
+    exit 1
+  fi
+
+  tabs_file="$config_dir/$workspace.tabs"
+  if [[ ! -f "$tabs_file" ]]; then
+    printf 'goob: missing workspace %s in %s\n' "$workspace" "$config_dir" >&2
+    exit 1
+  fi
+
+  shopt -s nullglob
+  tabs_files=("$config_dir"/*.tabs)
+  shopt -u nullglob
+  tabs_count="${#tabs_files[@]}"
+  if (( tabs_count <= 1 )); then
+    printf 'goob: cannot remove the last workspace in %s\n' "$config_dir" >&2
+    exit 1
+  fi
+
+  rm -f "$tabs_file"
+  remove_profile_workspace "$config_dir/profile.conf" "$workspace"
+  install_profile "$config_dir" >/dev/null
+  printf 'Removed workspace %s.\n' "$workspace"
 }
 
 run_install() {
@@ -832,6 +923,15 @@ case "$command_name" in
       exit 2
     fi
     rename_local_workspace "$1" "$2"
+    ;;
+  remove)
+    shift
+    if [[ "$#" -ne 1 ]]; then
+      printf 'goob: remove requires exactly one workspace name\n' >&2
+      usage
+      exit 2
+    fi
+    remove_local_workspace "$1"
     ;;
   *)
     if [[ "$command_name" == *"="* ]]; then

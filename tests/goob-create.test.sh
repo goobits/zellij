@@ -161,6 +161,73 @@ if (
   exit 1
 fi
 
+(
+  cd "$project"
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" remove frontend >/dev/null
+)
+
+if [[ -e "$project/config/zellij/frontend.tabs" ]]; then
+  printf 'Expected frontend.tabs to be removed\n' >&2
+  exit 1
+fi
+
+if [[ -e "$tmp/home/.local/share/zellij-workspaces/profiles/my-site/frontend.tabs" ]]; then
+  printf 'Expected installed frontend.tabs to be removed\n' >&2
+  exit 1
+fi
+
+expected_profile=$'name=my-site\nroot='"$project"$'\ndefault_workspace=main\ndefault_workspaces=main services'
+if [[ "$(cat "$project/config/zellij/profile.conf")" != "$expected_profile" ]]; then
+  printf 'Unexpected profile.conf after removing frontend:\n%s\n' "$(cat "$project/config/zellij/profile.conf")" >&2
+  exit 1
+fi
+
+(
+  cd "$project"
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" remove main >/dev/null
+)
+
+if [[ -e "$project/config/zellij/main.tabs" ]]; then
+  printf 'Expected main.tabs to be removed\n' >&2
+  exit 1
+fi
+
+expected_profile=$'name=my-site\nroot='"$project"$'\ndefault_workspace=services\ndefault_workspaces=services'
+if [[ "$(cat "$project/config/zellij/profile.conf")" != "$expected_profile" ]]; then
+  printf 'Unexpected profile.conf after removing default workspace:\n%s\n' "$(cat "$project/config/zellij/profile.conf")" >&2
+  exit 1
+fi
+
+listed="$(
+  cd "$project"
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" list
+)"
+if [[ "$listed" != 'services' ]]; then
+  printf 'Unexpected goob list output after removal:\n%s\n' "$listed" >&2
+  exit 1
+fi
+
+if (
+  cd "$project"
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" remove missing >/dev/null 2>&1
+); then
+  printf 'Expected goob remove to reject missing workspace\n' >&2
+  exit 1
+fi
+
+if (
+  cd "$project"
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" remove services >/dev/null 2>&1
+); then
+  printf 'Expected goob remove to reject removing the last workspace\n' >&2
+  exit 1
+fi
+
 for invalid_args in \
   'bad=tab,,name' \
   'bad=' \
