@@ -30,7 +30,11 @@ keybinds {
         bind "Super c" { Copy; }
         bind "Alt c" { Copy; }
         bind "Alt Backspace" { Write 23; }
+        bind "Alt Left" { Write 1; }
+        bind "Alt Right" { Write 5; }
         bind "Super Backspace" { Write 21; }
+        bind "Super Left" { Write 1; }
+        bind "Super Right" { Write 5; }
         bind "Ctrl y" { Copy; }
         bind "PageUp" { PageScrollUp; SwitchToMode "Scroll"; }
         bind "PageDown" { PageScrollDown; }
@@ -42,7 +46,7 @@ keybinds {
     }
     shared_except "locked" {
         unbind "Alt f" "Alt n" "Alt i" "Alt o"
-        unbind "Alt h" "Alt Left" "Alt l" "Alt Right"
+        unbind "Alt h" "Alt l"
         unbind "Alt j" "Alt Down" "Alt k" "Alt Up"
         unbind "Alt =" "Alt +" "Alt -" "Alt [" "Alt ]"
         unbind "Alt p" "Alt Shift p"

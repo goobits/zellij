@@ -184,13 +184,15 @@ keeps tabs alive when `Ctrl+C` exits tools such as Codex.
 ### 🍎 macOS Notes And Keybinds
 
 For Mac-like editing, let your terminal app handle standard shortcuts such as
-Command+C, Command+V, Command+L, and Command+Left/Right. Configure Option as
-Meta/Esc so Option+Left/Right reaches the shell for word movement.
+Command+C, Command+V, and Command+L. The config maps Apple/Meta arrows to shell
+line movement.
 
 The config maps standard Mac delete behaviors:
 
 - `Alt + Backspace`: Delete previous word
+- `Alt + Left/Right`: Move to start/end of line when Apple is sent as Meta
 - `Super + Backspace`: Delete current line
+- `Super + Left/Right`: Move to start/end of line when Apple is sent as Super
 
 Text selection does not copy automatically. Use `Super c`, `Alt c`, or `Ctrl y`
 to copy the active Zellij selection.
