@@ -55,10 +55,10 @@ _goob() {
           ;;
         setup)
           if [[ "$CURRENT" -eq 4 ]]; then
-            compadd -- --tab --agent --no-agent
+            compadd -- --tab --session --agent --no-agent
             _goob_workspaces
           else
-            compadd -- --tab --agent --no-agent
+            compadd -- --tab --session --agent --no-agent
           fi
           ;;
         add|request)

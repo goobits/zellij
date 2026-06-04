@@ -484,6 +484,40 @@ if ! grep -q -- '--summary requires a value' "$tmp/add-missing-value.err"; then
   exit 1
 fi
 
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit request \
+      --root "$tmp/commit-queue" \
+      --title "Typo flag" \
+      --path README.md \
+      --summry "typo" >/dev/null 2>"$tmp/request-unknown.err"
+); then
+  printf 'Expected goob commit request to reject unknown flags\n' >&2
+  exit 1
+fi
+if ! grep -q -- 'unknown option: --summry' "$tmp/request-unknown.err"; then
+  printf 'Expected unknown request option error:\n%s\n' "$(cat "$tmp/request-unknown.err")" >&2
+  exit 1
+fi
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit status --bogus >/dev/null 2>"$tmp/status-unknown.err"
+); then
+  printf 'Expected goob commit status to reject unknown flags\n' >&2
+  exit 1
+fi
+if ! grep -q -- 'unknown commit status argument --bogus' "$tmp/status-unknown.err"; then
+  printf 'Expected unknown status option error:\n%s\n' "$(cat "$tmp/status-unknown.err")" >&2
+  exit 1
+fi
+
 (
   cd "$tmp/project"
   HOME="$tmp/home" \
@@ -548,7 +582,7 @@ blocked_status_output="$(
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" commit status --root "$tmp/commit-queue"
 )"
-if [[ "$blocked_status_output" != $'Pending  2\nUnsafe   1\nBlocked  0\nDone     0\nNext     blocked; run `goob commit check`' ]]; then
+if [[ "$blocked_status_output" != $'Pending  2\nUnsafe   1\nBlocked  0\nDone     0\nNext     blocked; run `goob commit check --root '"$tmp/commit-queue"$'`' ]]; then
   printf 'Unexpected blocked commit status output:\n%s\n' "$blocked_status_output" >&2
   exit 1
 fi
@@ -717,6 +751,24 @@ if [[ "$(cat "$tmp/setup-written-chars.txt")" != 'codex' ]]; then
 fi
 if [[ "$(cat "$tmp/setup-sent-keys.txt")" != 'Enter' ]]; then
   printf 'Expected commit setup to press Enter:\n%s\n' "$(cat "$tmp/setup-sent-keys.txt")" >&2
+  exit 1
+fi
+
+: > "$tmp/setup-written-chars.txt"
+: > "$tmp/setup-sent-keys.txt"
+custom_session_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-commit-setup-order.txt" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/setup-written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/setup-sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit setup front --tab Git --session sketch-api --agent codex
+)"
+if [[ "$custom_session_output" != 'Commit tab Git is ready in sketch-api and received `codex`.' ]]; then
+  printf 'Unexpected custom session setup output:\n%s\n' "$custom_session_output" >&2
   exit 1
 fi
 

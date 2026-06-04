@@ -38,6 +38,13 @@ _goob_completion() {
     awk -F '\t' '{ print $1 }' "$tabs_file"
   }
 
+  _goob_file_replies() {
+    local file
+    while IFS= read -r file; do
+      COMPREPLY+=("$file")
+    done < <(compgen -f -- "$cur")
+  }
+
   case "${COMP_WORDS[1]:-}" in
     commit)
       if [[ "$COMP_CWORD" -eq 2 ]]; then
@@ -46,13 +53,14 @@ _goob_completion() {
         case "${COMP_WORDS[2]:-}" in
           setup)
             if [[ "$COMP_CWORD" -eq 3 ]]; then
-              COMPREPLY=( $(compgen -W "$(_goob_workspaces) --tab --agent --no-agent" -- "$cur") )
+              COMPREPLY=( $(compgen -W "$(_goob_workspaces) --tab --session --agent --no-agent" -- "$cur") )
             else
-              COMPREPLY=( $(compgen -W "--tab --agent --no-agent" -- "$cur") )
+              COMPREPLY=( $(compgen -W "--tab --session --agent --no-agent" -- "$cur") )
             fi
             ;;
           add|request)
-            COMPREPLY=( $(compgen -W "--check --verify --root --summary --owner --must-contain --must-not-contain --poke" -- "$cur") $(compgen -f -- "$cur") )
+            COMPREPLY=( $(compgen -W "--check --verify --root --summary --owner --must-contain --must-not-contain --poke" -- "$cur") )
+            _goob_file_replies
             ;;
           status|check|list|next)
             COMPREPLY=( $(compgen -W "--root" -- "$cur") )

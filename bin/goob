@@ -31,24 +31,25 @@ tabs:
   goob tab move <workspace> <tab@index>
   goob tab rename <workspace> <old-tab> <new-tab>
   goob tab remove <workspace> <tab>
+  goob tab refresh <workspace>
 
 sessions:
   goob ps
   goob kill <session>
 
 commit queue:
-  goob commit setup [workspace] [--tab Git] [--agent <cmd>|--no-agent]
-  goob commit add <title> <path>... [--check <cmd>] [--root <dir>] [--poke [tab]]
-  goob commit status [--root <dir>]
-  goob commit poke [tab] [--root <dir>]
+  goob commit setup [workspace] [--tab Git] [--session <name>] [--agent <cmd>|--no-agent]
+  goob commit add <title> <path>... [--check <cmd>] [--root <queue-root>] [--poke [tab]]
+  goob commit status [--root <queue-root>]
+  goob commit poke [tab] [--root <queue-root>]
 
 commit queue plumbing:
-  goob commit request --title <title> --path <path>... [--verify <cmd>] [--root <dir>] [--poke [tab]]
-  goob commit next [--root <dir>]
-  goob commit done <id-or-file> [--root <dir>]
-  goob commit block <id-or-file> --reason <reason> [--root <dir>]
-  goob commit check [--root <dir>]
-  goob commit list [--root <dir>]
+  goob commit request --title <title> --path <path>... [--verify <cmd>] [--summary <text>] [--root <queue-root>] [--poke [tab]]
+  goob commit next [--root <queue-root>]
+  goob commit done <id-or-file> [--root <queue-root>]
+  goob commit block <id-or-file> --reason <reason> [--root <queue-root>]
+  goob commit check [--root <queue-root>]
+  goob commit list [--root <queue-root>]
 
 system:
   goob install
@@ -591,13 +592,19 @@ require_option_value() {
 }
 
 print_commit_status() {
-  local pending done blocked unsafe next_tmp check_tmp
+  local root_value="${1:-}" pending done blocked unsafe next_tmp check_tmp check_command root_args=()
 
-  pending="$(run_commit_queue list "$@" 2>/dev/null | wc -l | tr -d ' ')"
-  done="$(run_commit_queue list --state done "$@" 2>/dev/null | wc -l | tr -d ' ')"
-  blocked="$(run_commit_queue list --state blocked "$@" 2>/dev/null | wc -l | tr -d ' ')"
+  check_command='goob commit check'
+  if [[ -n "$root_value" ]]; then
+    root_args=(--root "$root_value")
+    check_command="goob commit check --root $(printf '%q' "$root_value")"
+  fi
+
+  pending="$(run_commit_queue list "${root_args[@]}" | wc -l | tr -d ' ')"
+  done="$(run_commit_queue list --state done "${root_args[@]}" | wc -l | tr -d ' ')"
+  blocked="$(run_commit_queue list --state blocked "${root_args[@]}" | wc -l | tr -d ' ')"
   check_tmp="$(mktemp)"
-  if run_commit_queue check --json "$@" >"$check_tmp" 2>/dev/null; then
+  if run_commit_queue check --json "${root_args[@]}" >"$check_tmp"; then
     :
   fi
   unsafe="$(node -e "const fs=require('fs'); const p=process.argv[1]; let n=0; try { n=(JSON.parse(fs.readFileSync(p,'utf8')).blockers||[]).length } catch {} console.log(n)" "$check_tmp")"
@@ -608,13 +615,13 @@ print_commit_status() {
   printf 'Done     %s\n' "$done"
 
   next_tmp="$(mktemp)"
-  if [[ "$unsafe" == "0" ]] && run_commit_queue next "$@" >"$next_tmp" 2>/dev/null; then
+  if [[ "$unsafe" == "0" ]] && run_commit_queue next "${root_args[@]}" >"$next_tmp" 2>/dev/null; then
     if [[ -s "$next_tmp" ]] && ! grep -Fxq 'No safe pending commit request.' "$next_tmp"; then
       printf 'Next     %s\n' "$(sed -n '1p' "$next_tmp")"
     fi
   fi
   if [[ "$unsafe" != "0" ]]; then
-    printf 'Next     blocked; run `goob commit check`\n'
+    printf 'Next     blocked; run `%s`\n' "$check_command"
   fi
   rm -f "$next_tmp" "$check_tmp"
 }
@@ -676,7 +683,7 @@ poke_commit_tab() {
 }
 
 setup_commit_tab() {
-  local workspace="${1:-}" tab_name="Git" agent_command="codex" config_dir tabs_file default_workspace
+  local workspace="${1:-}" tab_name="Git" agent_command="codex" session_name="" config_dir tabs_file default_workspace
 
   if [[ -n "$workspace" && "$workspace" == --* ]]; then
     workspace=""
@@ -695,6 +702,11 @@ setup_commit_tab() {
       --agent)
         require_option_value "$1" "${2:-}"
         agent_command="${2:-}"
+        shift 2
+        ;;
+      --session)
+        require_option_value "$1" "${2:-}"
+        session_name="${2:-}"
         shift 2
         ;;
       --no-agent)
@@ -726,6 +738,9 @@ setup_commit_tab() {
     exit 1
   fi
   validate_name workspace "$workspace"
+  if [[ -z "$session_name" ]]; then
+    session_name="$workspace"
+  fi
 
   tabs_file="$config_dir/$workspace.tabs"
   if [[ ! -f "$tabs_file" ]]; then
@@ -738,11 +753,11 @@ setup_commit_tab() {
   sync_workspace_session "$config_dir" "$workspace"
 
   if [[ -n "$agent_command" ]]; then
-    if send_to_commit_tab "$tab_name" "$agent_command" "$workspace" >/dev/null; then
-      printf 'Commit tab %s is ready in %s and received `%s`.\n' "$tab_name" "$workspace" "$agent_command"
+    if send_to_commit_tab "$tab_name" "$agent_command" "$session_name" >/dev/null; then
+      printf 'Commit tab %s is ready in %s and received `%s`.\n' "$tab_name" "$session_name" "$agent_command"
       return 0
     fi
-    printf 'Commit tab %s is ready in %s, but no live tab was found to start `%s`.\n' "$tab_name" "$workspace" "$agent_command"
+    printf 'Commit tab %s is ready in %s, but no live tab was found to start `%s`.\n' "$tab_name" "$session_name" "$agent_command"
     printf 'Open the workspace, then run `goob commit poke %s`.\n' "$tab_name"
     return 0
   fi
@@ -865,7 +880,26 @@ run_commit_command() {
       fi
       ;;
     status)
-      print_commit_status "$@"
+      while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+          --root)
+            require_option_value "$1" "${2:-}"
+            root_value="${2:-}"
+            shift 2
+            ;;
+          --*)
+            printf 'goob: unknown commit status argument %s\n' "$1" >&2
+            usage
+            exit 2
+            ;;
+          *)
+            printf 'goob: commit status does not accept positional arguments: %s\n' "$1" >&2
+            usage
+            exit 2
+            ;;
+        esac
+      done
+      print_commit_status "$root_value"
       ;;
     list | check | next | done | block)
       run_commit_queue "$action" "$@"
