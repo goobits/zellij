@@ -39,6 +39,11 @@ _goob_completion() {
   }
 
   case "${COMP_WORDS[1]:-}" in
+    commit)
+      if [[ "$COMP_CWORD" -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "request list check next poke" -- "$cur") )
+      fi
+      ;;
     tab)
       case "${COMP_WORDS[2]:-}" in
         "")
@@ -68,7 +73,7 @@ _goob_completion() {
       ;;
     *)
       if [[ "$COMP_CWORD" -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "help install setup doctor list create refresh rename remove tab ps kill $(_goob_workspaces)" -- "$cur") )
+        COMPREPLY=( $(compgen -W "help install setup doctor list create refresh rename remove tab commit ps kill $(_goob_workspaces)" -- "$cur") )
       fi
       ;;
   esac

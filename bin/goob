@@ -31,6 +31,13 @@ sessions:
   goob ps
   goob kill <session>
 
+commits:
+  goob commit request --title <title> --path <path>... [--verify <cmd>] [--poke [tab]]
+  goob commit list
+  goob commit check
+  goob commit next
+  goob commit poke [tab]
+
 system:
   goob install
   goob setup --config <profile-dir>
@@ -531,6 +538,110 @@ refresh_workspace_tabs() {
 
   ZELLIJ_SESSION_NAME="$workspace" zellij action save-session >/dev/null 2>&1 || true
   printf 'Refreshed %s tab titles (%s renamed).\n' "$workspace" "$renamed"
+}
+
+commit_queue_helper() {
+  local dir="$PWD"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/tasks/workspace/commitQueue.mjs" ]]; then
+      printf '%s/tasks/workspace/commitQueue.mjs' "$dir"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+
+  printf 'goob: could not find tasks/workspace/commitQueue.mjs from %s\n' "$PWD" >&2
+  exit 1
+}
+
+run_commit_queue() {
+  local helper
+  helper="$(commit_queue_helper)"
+  node "$helper" "$@"
+}
+
+commit_tab_id() {
+  local requested_name="$1"
+
+  command -v jq >/dev/null 2>&1 || return 0
+  zellij action list-tabs --json 2>/dev/null | jq -r --arg name "$requested_name" '
+    def base_name:
+      sub(" 🤖$"; "")
+      | sub(" 🔔$"; "");
+
+    .[]
+    | select((.name | base_name) == $name)
+    | .tab_id
+  ' 2>/dev/null | sed -n '1p'
+}
+
+poke_commit_tab() {
+  local requested_name="${1:-Git}" tab_id
+
+  validate_name tab "$requested_name"
+  tab_id="$(commit_tab_id "$requested_name")"
+  if [[ -z "$tab_id" ]]; then
+    printf 'Created commit request. No live Zellij tab named %s was found to poke.\n' "$requested_name"
+    return 0
+  fi
+
+  zellij action go-to-tab-by-id "$tab_id" >/dev/null
+  zellij action write-chars '$x-commit next' >/dev/null
+  zellij action send-keys Enter >/dev/null
+  printf 'Poked %s with $x-commit next.\n' "$requested_name"
+}
+
+run_commit_command() {
+  local action="${1:-}" poke=false poke_tab="Git" filtered=() arg
+
+  if [[ -z "$action" ]]; then
+    printf 'goob: commit requires an action\n' >&2
+    usage
+    exit 2
+  fi
+  shift
+
+  case "$action" in
+    request)
+      while [[ "$#" -gt 0 ]]; do
+        arg="$1"
+        case "$arg" in
+          --poke)
+            poke=true
+            shift
+            if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then
+              poke_tab="$1"
+              shift
+            fi
+            ;;
+          *)
+            filtered+=("$arg")
+            shift
+            ;;
+        esac
+      done
+      run_commit_queue request "${filtered[@]}"
+      if [[ "$poke" == "true" ]]; then
+        poke_commit_tab "$poke_tab"
+      fi
+      ;;
+    list | check | next)
+      run_commit_queue "$action" "$@"
+      ;;
+    poke)
+      if [[ "$#" -gt 1 ]]; then
+        printf 'goob: commit poke accepts at most one tab name\n' >&2
+        usage
+        exit 2
+      fi
+      poke_commit_tab "${1:-Git}"
+      ;;
+    *)
+      printf 'goob: unknown commit action %s\n' "$action" >&2
+      usage
+      exit 2
+      ;;
+  esac
 }
 
 run_workspace_tab_command() {
@@ -1058,6 +1169,10 @@ case "$command_name" in
         exit 2
         ;;
     esac
+    ;;
+  commit)
+    shift
+    run_commit_command "$@"
     ;;
   ps)
     shift
