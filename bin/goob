@@ -32,6 +32,7 @@ sessions:
   goob kill <session>
 
 commits:
+  goob commit setup [workspace] [--tab Git] [--agent codex|--no-agent]
   goob commit request --title <title> --path <path>... [--verify <cmd>] [--poke [tab]]
   goob commit list
   goob commit check
@@ -573,10 +574,14 @@ run_commit_queue() {
 }
 
 commit_tab_id() {
-  local requested_name="$1"
+  local requested_name="$1" session="${2:-}"
 
   command -v jq >/dev/null 2>&1 || return 0
-  zellij action list-tabs --json 2>/dev/null | jq -r --arg name "$requested_name" '
+  if [[ -n "$session" ]]; then
+    ZELLIJ_SESSION_NAME="$session" zellij action list-tabs --json 2>/dev/null
+  else
+    zellij action list-tabs --json 2>/dev/null
+  fi | jq -r --arg name "$requested_name" '
     def base_name:
       sub(" 🤖$"; "")
       | sub(" 🔔$"; "");
@@ -587,20 +592,103 @@ commit_tab_id() {
   ' 2>/dev/null | sed -n '1p'
 }
 
-poke_commit_tab() {
-  local requested_name="${1:-Git}" tab_id
+send_to_commit_tab() {
+  local requested_name="${1:-Git}" message="${2:-}" session="${3:-}" tab_id
 
   validate_name tab "$requested_name"
-  tab_id="$(commit_tab_id "$requested_name")"
+  tab_id="$(commit_tab_id "$requested_name" "$session")"
   if [[ -z "$tab_id" ]]; then
     printf 'Created commit request. No live Zellij tab named %s was found to poke.\n' "$requested_name"
-    return 0
+    return 1
   fi
 
-  zellij action go-to-tab-by-id "$tab_id" >/dev/null
-  zellij action write-chars '$x-commit next' >/dev/null
-  zellij action send-keys Enter >/dev/null
-  printf 'Poked %s with $x-commit next.\n' "$requested_name"
+  if [[ -n "$session" ]]; then
+    ZELLIJ_SESSION_NAME="$session" zellij action go-to-tab-by-id "$tab_id" >/dev/null
+    ZELLIJ_SESSION_NAME="$session" zellij action write-chars "$message" >/dev/null
+    ZELLIJ_SESSION_NAME="$session" zellij action send-keys Enter >/dev/null
+  else
+    zellij action go-to-tab-by-id "$tab_id" >/dev/null
+    zellij action write-chars "$message" >/dev/null
+    zellij action send-keys Enter >/dev/null
+  fi
+}
+
+poke_commit_tab() {
+  local requested_name="${1:-Git}" session="${2:-}"
+
+  if send_to_commit_tab "$requested_name" '$x-commit next' "$session"; then
+    printf 'Poked %s with $x-commit next.\n' "$requested_name"
+  fi
+}
+
+setup_commit_tab() {
+  local workspace="${1:-}" tab_name="Git" agent_command="codex" config_dir tabs_file default_workspace
+
+  if [[ -n "$workspace" && "$workspace" == --* ]]; then
+    workspace=""
+  fi
+  if [[ -n "$workspace" ]]; then
+    shift
+  fi
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --tab)
+        tab_name="${2:-}"
+        shift 2
+        ;;
+      --agent)
+        agent_command="${2:-}"
+        shift 2
+        ;;
+      --no-agent)
+        agent_command=""
+        shift
+        ;;
+      *)
+        printf 'goob: unknown commit setup argument %s\n' "$1" >&2
+        usage
+        exit 2
+        ;;
+    esac
+  done
+
+  validate_name tab "$tab_name"
+  if config_dir="$(find_config_dir)"; then
+    :
+  else
+    printf 'goob: could not find config/zellij; create a workspace first\n' >&2
+    exit 1
+  fi
+
+  if [[ -z "$workspace" ]]; then
+    default_workspace="$(default_workspace_from_config "$config_dir")"
+    workspace="$default_workspace"
+  fi
+  if [[ -z "$workspace" ]]; then
+    printf 'goob: no default workspace configured; pass a workspace name\n' >&2
+    exit 1
+  fi
+  validate_name workspace "$workspace"
+
+  tabs_file="$config_dir/$workspace.tabs"
+  if [[ ! -f "$tabs_file" ]]; then
+    printf 'goob: missing workspace %s in %s\n' "$workspace" "$config_dir" >&2
+    exit 1
+  fi
+
+  upsert_workspace_tab_line "$tabs_file" "$tab_name"
+  install_profile "$config_dir" >/dev/null
+  sync_workspace_session "$config_dir" "$workspace"
+
+  if [[ -n "$agent_command" ]]; then
+    if send_to_commit_tab "$tab_name" "$agent_command" "$workspace" >/dev/null; then
+      printf 'Commit tab %s is ready in %s and received `%s`.\n' "$tab_name" "$workspace" "$agent_command"
+      return 0
+    fi
+  fi
+
+  printf 'Commit tab %s is ready in %s.\n' "$tab_name" "$workspace"
 }
 
 run_commit_command() {
@@ -614,6 +702,9 @@ run_commit_command() {
   shift
 
   case "$action" in
+    setup)
+      setup_commit_tab "$@"
+      ;;
     request)
       while [[ "$#" -gt 0 ]]; do
         arg="$1"

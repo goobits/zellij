@@ -561,6 +561,45 @@ if [[ "$missing_poke_output" != 'Created commit request. No live Zellij tab name
   exit 1
 fi
 
+cat > "$tmp/tabs.tsv" <<'EOF'
+0	0	true	tools
+1	1	false	Git
+EOF
+: > "$tmp/setup-written-chars.txt"
+: > "$tmp/setup-sent-keys.txt"
+
+setup_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-commit-setup-order.txt" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/setup-written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/setup-sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit setup front --tab Git --agent codex
+)"
+if [[ "$setup_output" != 'Commit tab Git is ready in front and received `codex`.' ]]; then
+  printf 'Unexpected commit setup output:\n%s\n' "$setup_output" >&2
+  exit 1
+fi
+if [[ "$(tail -n 1 "$profile_dir/front.tabs")" != 'Git' ]]; then
+  printf 'Expected commit setup to append Git tab:\n%s\n' "$(cat "$profile_dir/front.tabs")" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/front-commit-setup-order.txt")" != $'front\ntools\nsearch\ncomponents\nskills\nscratch\nGit' ]]; then
+  printf 'Unexpected commit setup sync order:\n%s\n' "$(cat "$tmp/front-commit-setup-order.txt")" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/setup-written-chars.txt")" != 'codex' ]]; then
+  printf 'Expected commit setup to start codex:\n%s\n' "$(cat "$tmp/setup-written-chars.txt")" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/setup-sent-keys.txt")" != 'Enter' ]]; then
+  printf 'Expected commit setup to press Enter:\n%s\n' "$(cat "$tmp/setup-sent-keys.txt")" >&2
+  exit 1
+fi
+
 sessions="$(
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" ps

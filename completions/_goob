@@ -45,7 +45,7 @@ _goob() {
   local -a commands tab_commands commit_commands
   commands=(help install setup doctor list create refresh rename remove tab commit ps kill)
   tab_commands=(list add move rename remove refresh)
-  commit_commands=(request list check next done block poke)
+  commit_commands=(setup request list check next done block poke)
 
   case "${words[2]:-}" in
     commit)
