@@ -36,6 +36,8 @@ commits:
   goob commit list
   goob commit check
   goob commit next
+  goob commit done <id-or-file>
+  goob commit block <id-or-file> --reason <reason>
   goob commit poke [tab]
 
 system:
@@ -625,7 +627,7 @@ run_commit_command() {
         poke_commit_tab "$poke_tab"
       fi
       ;;
-    list | check | next)
+    list | check | next | done | block)
       run_commit_queue "$action" "$@"
       ;;
     poke)
