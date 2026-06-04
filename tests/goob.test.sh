@@ -771,6 +771,10 @@ if [[ "$custom_session_output" != 'Commit tab Git is ready in sketch-api and rec
   printf 'Unexpected custom session setup output:\n%s\n' "$custom_session_output" >&2
   exit 1
 fi
+if [[ "$(cat "$tmp/front-commit-setup-order.txt")" != $'sketch-api\ntools\nsearch\ncomponents\nskills\nscratch\nGit' ]]; then
+  printf 'Expected custom session setup to sync sketch-api:\n%s\n' "$(cat "$tmp/front-commit-setup-order.txt")" >&2
+  exit 1
+fi
 
 if (
   cd "$tmp/project"

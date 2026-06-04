@@ -120,6 +120,11 @@ goob commit poke Git
 If you use a custom queue root, pass `--root <queue-root>` to both the producer
 and the `Git` tab command.
 
+```bash
+goob commit add "Update docs" README.md --root /tmp/commit-queue --poke Git
+goob commit poke Git --root /tmp/commit-queue
+```
+
 ## 📁 How Profiles Work
 
 A profile is a directory of inert config data that `goob` reads to build your

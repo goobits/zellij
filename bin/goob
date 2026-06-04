@@ -39,7 +39,7 @@ sessions:
 
 commit queue:
   goob commit setup [workspace] [--tab Git] [--session <name>] [--agent <cmd>|--no-agent]
-  goob commit add <title> <path>... [--check <cmd>] [--root <queue-root>] [--poke [tab]]
+  goob commit add <title> <path>... [--check <cmd>] [--summary <text>] [--root <queue-root>] [--poke [tab]]
   goob commit status [--root <queue-root>]
   goob commit poke [tab] [--root <queue-root>]
 
@@ -339,7 +339,7 @@ parse_tabs_args() {
 }
 
 sync_workspace_session() {
-  local config_dir="$1" workspace="$2" tab_order_helper="$script_dir/zellij-session-tab-order"
+  local config_dir="$1" workspace="$2" session_name="${3:-$2}" tab_order_helper="$script_dir/zellij-session-tab-order"
   local tab_order=() default_cwd
 
   [[ -x "$tab_order_helper" ]] || return 0
@@ -349,7 +349,7 @@ sync_workspace_session() {
   default_cwd="$(profile_value "$config_dir/profile.conf" root "${PWD:-/workspace}")"
   ZELLIJ_SESSION_TAB_DEFAULT_CWD="$default_cwd" \
   ZELLIJ_SESSION_TAB_ORDER_CREATE_MISSING=1 \
-    "$tab_order_helper" "$workspace" "${tab_order[@]}"
+    "$tab_order_helper" "$session_name" "${tab_order[@]}"
 }
 
 tab_name_from_line() {
@@ -750,7 +750,7 @@ setup_commit_tab() {
 
   upsert_workspace_tab_line "$tabs_file" "$tab_name"
   install_profile "$config_dir" >/dev/null
-  sync_workspace_session "$config_dir" "$workspace"
+  sync_workspace_session "$config_dir" "$workspace" "$session_name"
 
   if [[ -n "$agent_command" ]]; then
     if send_to_commit_tab "$tab_name" "$agent_command" "$session_name" >/dev/null; then
