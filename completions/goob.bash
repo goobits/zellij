@@ -41,7 +41,7 @@ _goob_completion() {
   case "${COMP_WORDS[1]:-}" in
     commit)
       if [[ "$COMP_CWORD" -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W "setup request list check next done block poke" -- "$cur") )
+        COMPREPLY=( $(compgen -W "setup add status poke request next done block check list" -- "$cur") )
       fi
       ;;
     tab)

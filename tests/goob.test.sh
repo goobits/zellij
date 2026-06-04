@@ -442,11 +442,9 @@ commit_request_output="$(
   HOME="$tmp/home" \
   GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
-    "$tmp/home/.local/bin/goob" commit request \
+    "$tmp/home/.local/bin/goob" commit add "Commit queue docs" README.md \
       --root "$tmp/commit-queue" \
-      --title "Commit queue docs" \
-      --path README.md \
-      --verify "echo ok" \
+      --check "echo ok" \
       --must-contain "Commit queue test"
 )"
 if [[ ! -f "$commit_request_output" ]]; then
@@ -461,6 +459,29 @@ fi
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" commit check --root "$tmp/commit-queue" >/dev/null
 )
+
+commit_status_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit status --root "$tmp/commit-queue"
+)"
+if [[ "$commit_status_output" != $'Pending  1\nBlocked  0\nDone     0\nNext     '*"Commit queue docs"* ]]; then
+  printf 'Unexpected commit status output:\n%s\n' "$commit_status_output" >&2
+  exit 1
+fi
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit add "Missing paths" --root "$tmp/commit-queue" >/dev/null 2>&1
+); then
+  printf 'Expected goob commit add to reject requests without paths\n' >&2
+  exit 1
+fi
 
 (
   cd "$tmp/project"

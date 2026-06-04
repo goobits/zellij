@@ -31,15 +31,19 @@ sessions:
   goob ps
   goob kill <session>
 
-commits:
+commit queue:
   goob commit setup [workspace] [--tab Git] [--agent codex|--no-agent]
+  goob commit add <title> <path>... [--check <cmd>] [--poke [tab]]
+  goob commit status
+  goob commit poke [tab]
+
+commit queue plumbing:
   goob commit request --title <title> --path <path>... [--verify <cmd>] [--poke [tab]]
-  goob commit list
-  goob commit check
   goob commit next
   goob commit done <id-or-file>
   goob commit block <id-or-file> --reason <reason>
-  goob commit poke [tab]
+  goob commit check
+  goob commit list
 
 system:
   goob install
@@ -573,6 +577,26 @@ run_commit_queue() {
   node "$helper" "$@"
 }
 
+print_commit_status() {
+  local pending done blocked next_tmp
+
+  pending="$(run_commit_queue list "$@" 2>/dev/null | wc -l | tr -d ' ')"
+  done="$(run_commit_queue list --state done "$@" 2>/dev/null | wc -l | tr -d ' ')"
+  blocked="$(run_commit_queue list --state blocked "$@" 2>/dev/null | wc -l | tr -d ' ')"
+
+  printf 'Pending  %s\n' "$pending"
+  printf 'Blocked  %s\n' "$blocked"
+  printf 'Done     %s\n' "$done"
+
+  next_tmp="$(mktemp)"
+  if run_commit_queue next "$@" >"$next_tmp" 2>/dev/null; then
+    if [[ -s "$next_tmp" ]] && ! grep -Fxq 'No safe pending commit request.' "$next_tmp"; then
+      printf 'Next     %s\n' "$(sed -n '1p' "$next_tmp")"
+    fi
+  fi
+  rm -f "$next_tmp"
+}
+
 commit_tab_id() {
   local requested_name="$1" session="${2:-}"
 
@@ -692,7 +716,7 @@ setup_commit_tab() {
 }
 
 run_commit_command() {
-  local action="${1:-}" poke=false poke_tab="Git" filtered=() arg
+  local action="${1:-}" poke=false poke_tab="Git" filtered=() arg path_count=0
 
   if [[ -z "$action" ]]; then
     printf 'goob: commit requires an action\n' >&2
@@ -705,10 +729,76 @@ run_commit_command() {
     setup)
       setup_commit_tab "$@"
       ;;
+    add)
+      if [[ "$#" -lt 2 ]]; then
+        printf 'goob: commit add requires a title and at least one path\n' >&2
+        usage
+        exit 2
+      fi
+      filtered=(--title "$1")
+      path_count=0
+      shift
+      while [[ "$#" -gt 0 ]]; do
+        arg="$1"
+        case "$arg" in
+          --check | --verify)
+            if [[ -z "${2:-}" ]]; then
+              printf 'goob: %s requires a value\n' "$arg" >&2
+              exit 2
+            fi
+            filtered+=(--verify "${2:-}")
+            shift 2
+            ;;
+          --root | --summary | --owner | --must-contain | --must-not-contain)
+            if [[ -z "${2:-}" ]]; then
+              printf 'goob: %s requires a value\n' "$arg" >&2
+              exit 2
+            fi
+            filtered+=("$arg" "${2:-}")
+            shift 2
+            ;;
+          --poke)
+            poke=true
+            shift
+            if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then
+              poke_tab="$1"
+              shift
+            fi
+            ;;
+          --*)
+            printf 'goob: unknown commit add argument %s\n' "$arg" >&2
+            usage
+            exit 2
+            ;;
+          *)
+            filtered+=(--path "$arg")
+            path_count=$((path_count + 1))
+            shift
+            ;;
+        esac
+      done
+      if [[ "$path_count" -eq 0 ]]; then
+        printf 'goob: commit add requires at least one path\n' >&2
+        usage
+        exit 2
+      fi
+      run_commit_queue request "${filtered[@]}"
+      if [[ "$poke" == "true" ]]; then
+        poke_commit_tab "$poke_tab"
+      fi
+      ;;
     request)
       while [[ "$#" -gt 0 ]]; do
         arg="$1"
         case "$arg" in
+          --check)
+            if [[ -z "${2:-}" ]]; then
+              printf 'goob: %s requires a value\n' "$arg" >&2
+              exit 2
+            fi
+            filtered+=(--verify "${2:-}")
+            shift 2
+            ;;
           --poke)
             poke=true
             shift
@@ -727,6 +817,9 @@ run_commit_command() {
       if [[ "$poke" == "true" ]]; then
         poke_commit_tab "$poke_tab"
       fi
+      ;;
+    status)
+      print_commit_status "$@"
       ;;
     list | check | next | done | block)
       run_commit_queue "$action" "$@"
