@@ -762,7 +762,7 @@ setup_commit_tab() {
     return 0
   fi
 
-  printf 'Commit tab %s is ready in %s.\n' "$tab_name" "$workspace"
+  printf 'Commit tab %s is ready in %s.\n' "$tab_name" "$session_name"
 }
 
 run_commit_command() {

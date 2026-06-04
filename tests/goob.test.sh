@@ -776,6 +776,20 @@ if [[ "$(cat "$tmp/front-commit-setup-order.txt")" != $'sketch-api\ntools\nsearc
   exit 1
 fi
 
+no_agent_session_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-commit-setup-order.txt" \
+    "$tmp/home/.local/bin/goob" commit setup front --tab Git --session sketch-api --no-agent
+)"
+if [[ "$no_agent_session_output" != 'Commit tab Git is ready in sketch-api.' ]]; then
+  printf 'Unexpected no-agent custom session setup output:\n%s\n' "$no_agent_session_output" >&2
+  exit 1
+fi
+
 if (
   cd "$tmp/project"
   HOME="$tmp/home" \

@@ -104,6 +104,8 @@ _goob_completion() {
     *)
       if [[ "$COMP_CWORD" -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "help install setup doctor list create refresh rename remove tab commit ps kill $(_goob_workspaces)" -- "$cur") )
+      elif [[ "$COMP_CWORD" -gt 1 ]]; then
+        COMPREPLY=( $(compgen -W "-s --session -r --root" -- "$cur") )
       fi
       ;;
   esac

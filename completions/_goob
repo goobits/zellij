@@ -113,6 +113,8 @@ _goob() {
       if [[ "$CURRENT" -eq 2 ]]; then
         compadd -- "${commands[@]}"
         _goob_workspaces
+      elif [[ "$CURRENT" -gt 2 ]]; then
+        compadd -- -s --session -r --root
       fi
       ;;
   esac
