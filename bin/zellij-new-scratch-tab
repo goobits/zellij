@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+base_name="${1:-scratch}"
+if [[ ! "$base_name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+  printf 'zellij-new-scratch-tab: tab name may only use letters, numbers, dot, underscore, and dash: %s\n' "$base_name" >&2
+  exit 2
+fi
+
+tab_names="$(
+  if command -v jq >/dev/null 2>&1; then
+    zellij action list-tabs --json 2>/dev/null | jq -r '
+      def base_name:
+        sub(" 🤖$"; "")
+        | sub(" 🔔$"; "");
+
+      .[]?.name // empty | base_name
+    ' 2>/dev/null || true
+  fi
+)"
+
+next_name="$base_name"
+index=1
+while grep -Fxq "$next_name" <<<"$tab_names"; do
+  next_name="${base_name}${index}"
+  index=$((index + 1))
+done
+
+zellij action new-tab --name "$next_name" --cwd "${PWD:-$HOME}" >/dev/null
+zellij action save-session >/dev/null 2>&1 || true

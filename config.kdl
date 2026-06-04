@@ -36,6 +36,7 @@ keybinds {
         bind "Super Left" { Write 1; }
         bind "Super Right" { Write 5; }
         bind "Ctrl y" { Copy; }
+        bind "Ctrl t" { Run "zellij-new-scratch-tab"; }
         bind "PageUp" { PageScrollUp; SwitchToMode "Scroll"; }
         bind "PageDown" { PageScrollDown; }
     }

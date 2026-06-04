@@ -90,6 +90,7 @@ for executable in \
   zellij-saved-session-order \
   zellij-live-tab-order \
   zellij-session-tab-order \
+  zellij-new-scratch-tab \
   goob \
   zellij-workspace-init \
   zellij-workspace-doctor \

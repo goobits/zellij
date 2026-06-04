@@ -28,6 +28,7 @@ for executable in \
   zellij-session-tab-order \
   zellij-saved-session-order \
   zellij-live-tab-order \
+  zellij-new-scratch-tab \
   zellij-open-session \
   zellij-render-layout \
   zwork \
@@ -43,7 +44,9 @@ do
 done
 
 for file in \
-  .config/zellij/config.kdl
+  .config/zellij/config.kdl \
+  .local/share/zellij-workspaces/completions/_goob \
+  .local/share/zellij-workspaces/completions/goob.bash
 do
   if [[ ! -f "$tmp/home/$file" ]]; then
     printf 'Expected installed file %s\n' "$file" >&2

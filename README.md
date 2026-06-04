@@ -52,11 +52,14 @@ When a project has `config/zellij/`, `goob` auto-detects it. You do not need to
 manually link or install profiles for normal repos.
 
 ```bash
-# Show available commands
+# Open the default workspace
 goob
 
 # Open a specific workspace
 goob frontend
+
+# Show available commands
+goob help
 
 # Create, add, or replace a local workspace, then sync a matching session
 goob now=tools,components,scratch
@@ -77,10 +80,15 @@ goob frontend -s sketch-api -r /custom/workspace/path
 goob list         # List available workspaces in the current project
 goob ps           # List running Zellij sessions
 goob kill <name>  # Kill a specific session
+goob create docs guide api scratch
+goob refresh front
 goob rename <old> <new>
 goob remove <workspace>
 goob doctor       # Validate the install and current profile config
 ```
+
+Shell completions are installed for zsh and bash. They complete commands,
+workspace names, and known tab names from the current `config/zellij` profile.
 
 ### 5. Live Tab Management
 
@@ -88,13 +96,13 @@ Workspace names can also manage their live Zellij tabs. Indexed tab specs use
 zero-based positions, so `keyboard@1` places `keyboard` at the second tab.
 
 ```bash
-goob front list
-goob front add keyboard
-goob front add keyboard@1
-goob front remove keyboard
-goob front move keyboard@1
-goob front rename keyboard keys
-goob front refresh
+goob tab list front
+goob tab add front keyboard
+goob tab add front keyboard@1
+goob tab remove front keyboard
+goob tab move front keyboard@1
+goob tab rename front keyboard keys
+goob refresh front
 ```
 
 ## 📁 How Profiles Work
@@ -191,6 +199,9 @@ For Mac-like editing, let your terminal app handle standard shortcuts such as
 Command+C, Command+V, and Command+L. The config maps Apple/Meta arrows to shell
 line movement.
 
+`Ctrl+T` creates a new scratch tab. If `scratch` already exists, it creates the
+next available name such as `scratch1`, `scratch2`, and so on.
+
 The config maps standard Mac delete behaviors:
 
 - `Alt + Backspace`: Delete previous word
@@ -214,6 +225,7 @@ touch these directly, but they are available for scripting:
 - `zwork <profile> <workspace> [session] [workdir]`
 - `zellij-workspace-init`
 - `zellij-workspace-doctor`
+- `zellij-new-scratch-tab`
 - `zellij-launch-session`
 - `zellij-open-session`
 - `zellij-render-layout`

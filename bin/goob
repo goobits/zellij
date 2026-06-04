@@ -6,24 +6,39 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   cat <<'EOF' >&2
+goob: Zero-friction Zellij workspaces
+
 usage:
-  goob
+  goob                                open the default workspace
+  goob <workspace> [-s <session>] [-r <root>]
+
+workspaces:
+  goob list [--config <profile-dir>]
+  goob create <workspace> <tabs...>
+  goob refresh <workspace>
+  goob rename <workspace> <new-workspace>
+  goob remove <workspace>
+  goob <workspace>=<tab>,...          create, add, replace, and sync a workspace
+
+tabs:
+  goob tab list <workspace>
+  goob tab add <workspace> <tab[@index]>
+  goob tab move <workspace> <tab@index>
+  goob tab rename <workspace> <old-tab> <new-tab>
+  goob tab remove <workspace> <tab>
+
+sessions:
+  goob ps
+  goob kill <session>
+
+system:
   goob install
   goob setup --config <profile-dir>
   goob doctor [--config <profile-dir>]
-  goob list [--config <profile-dir>]
-  goob ps
-  goob kill <session>
-  goob rename <workspace> <new-workspace>
-  goob remove <workspace>
-  goob <workspace> list
-  goob <workspace> add <tab[@index]>
-  goob <workspace> remove <tab>
-  goob <workspace> move <tab@index>
-  goob <workspace> rename <old-tab> <new-tab>
-  goob <workspace> refresh
-  goob <workspace>=<tab>,...   # create, add, replace, and sync a local workspace
-  goob <workspace> [-s <session>] [-r <root>]
+  goob help
+
+legacy tab aliases still work:
+  goob <workspace> list|add|move|rename|remove|refresh ...
 EOF
 }
 
@@ -151,6 +166,19 @@ profile_dir_from_installed_default() {
   printf '%s/.local/share/zellij-workspaces/profiles/%s' "$HOME" "$profile_name"
 }
 
+default_workspace_from_config() {
+  local config_dir="$1" default_workspace
+
+  default_workspace="$(profile_value "$config_dir/profile.conf" default_workspace "")"
+  if [[ -n "$default_workspace" ]]; then
+    printf '%s' "$default_workspace"
+    return
+  fi
+
+  default_workspace="$(profile_value "$config_dir/profile.conf" default_workspaces "")"
+  printf '%s' "${default_workspace%% *}"
+}
+
 list_workspaces() {
   local config_dir="$1" tabs_files=()
   shopt -s nullglob
@@ -263,6 +291,30 @@ parse_tabs_csv() {
       exit 2
     fi
     validate_name tab "$tab"
+  done
+}
+
+parse_tabs_args() {
+  local tab
+  parsed_tabs=()
+
+  if (( "$#" == 1 )) && [[ "${1:-}" == *","* ]]; then
+    parse_tabs_csv "$1"
+    return
+  fi
+
+  if (( "$#" == 0 )); then
+    printf 'goob: expected at least one tab\n' >&2
+    exit 2
+  fi
+
+  for tab in "$@"; do
+    if [[ -z "$tab" ]]; then
+      printf 'goob: empty tab name\n' >&2
+      exit 2
+    fi
+    validate_name tab "$tab"
+    parsed_tabs+=("$tab")
   done
 }
 
@@ -612,6 +664,49 @@ upsert_local_workspace() {
   fi
 }
 
+create_local_workspace() {
+  local workspace="$1" config_dir profile_name root created=false tabs_file
+  shift
+
+  validate_name workspace "$workspace"
+  parse_tabs_args "$@"
+
+  if ! config_dir="$(find_config_dir)"; then
+    config_dir="${GOOB_CONFIG_DIR:-$PWD/config/zellij}"
+    install -d "$config_dir"
+    config_dir="$(cd -- "$config_dir" && pwd)"
+    profile_name="$(basename "$PWD")"
+    validate_name profile "$profile_name"
+    root="$(resolve_root "$PWD")"
+    {
+      printf 'name=%s\n' "$profile_name"
+      printf 'root=%s\n' "$root"
+      printf 'default_workspace=%s\n' "$workspace"
+      printf 'default_workspaces=%s\n' "$workspace"
+    } > "$config_dir/profile.conf"
+    created=true
+  fi
+
+  tabs_file="$config_dir/$workspace.tabs"
+  if [[ -e "$tabs_file" ]]; then
+    printf 'goob: workspace already exists: %s\n' "$workspace" >&2
+    printf 'Replace it with: goob %s=<tab>,...\n' "$workspace" >&2
+    exit 1
+  fi
+
+  write_tabs_file "$config_dir" "$workspace" "${parsed_tabs[@]}"
+  if [[ "$created" != "true" ]]; then
+    add_profile_workspace "$config_dir/profile.conf" "$workspace"
+  fi
+  install_profile "$config_dir" >/dev/null
+  sync_workspace_session "$config_dir" "$workspace"
+  if [[ "$created" == "true" ]]; then
+    printf 'Created profile and workspace %s.\n' "$workspace"
+  else
+    printf 'Created workspace %s.\n' "$workspace"
+  fi
+}
+
 replace_profile_workspace() {
   local config_file="$1" old_workspace="$2" new_workspace="$3"
   local default_workspace default_workspaces current rewritten="" emitted=" " found=false tmp
@@ -850,11 +945,17 @@ run_launch() {
 }
 
 case "$command_name" in
-  -h | --help)
+  -h | --help | help)
     usage
     exit 0
     ;;
   "")
+    if config_dir="$(auto_install_config)"; then
+      default_workspace="$(default_workspace_from_config "$config_dir")"
+      if [[ -n "$default_workspace" ]]; then
+        run_launch "$default_workspace"
+      fi
+    fi
     usage
     exit 0
     ;;
@@ -894,6 +995,69 @@ case "$command_name" in
       config_dir="$(profile_dir_from_installed_default)"
     fi
     list_workspaces "$config_dir"
+    ;;
+  create)
+    shift
+    workspace="${1:-}"
+    if [[ -z "$workspace" || "$#" -lt 2 ]]; then
+      printf 'goob: create requires a workspace and at least one tab\n' >&2
+      usage
+      exit 2
+    fi
+    shift
+    create_local_workspace "$workspace" "$@"
+    ;;
+  refresh)
+    shift
+    workspace="${1:-}"
+    if [[ -z "$workspace" || "$#" -ne 1 ]]; then
+      printf 'goob: refresh requires exactly one workspace name\n' >&2
+      printf 'example: goob refresh front\n' >&2
+      usage
+      exit 2
+    fi
+    run_workspace_tab_command "$workspace" refresh
+    ;;
+  tab)
+    shift
+    action="${1:-}"
+    workspace="${2:-}"
+    if [[ -z "$action" || -z "$workspace" ]]; then
+      printf 'goob: tab requires an action and workspace\n' >&2
+      usage
+      exit 2
+    fi
+    case "$action" in
+      list | refresh)
+        if [[ "$#" -ne 2 ]]; then
+          printf 'goob: tab %s requires exactly one workspace\n' "$action" >&2
+          usage
+          exit 2
+        fi
+        run_workspace_tab_command "$workspace" "$action"
+        ;;
+      add | move | remove)
+        if [[ "$#" -ne 3 ]]; then
+          printf 'goob: tab %s requires a workspace and tab\n' "$action" >&2
+          usage
+          exit 2
+        fi
+        run_workspace_tab_command "$workspace" "$action" "${3:-}"
+        ;;
+      rename)
+        if [[ "$#" -ne 4 ]]; then
+          printf 'goob: tab rename requires a workspace, old tab, and new tab\n' >&2
+          usage
+          exit 2
+        fi
+        run_workspace_tab_command "$workspace" "$action" "${3:-}" "${4:-}"
+        ;;
+      *)
+        printf 'goob: unknown tab action %s\n' "$action" >&2
+        usage
+        exit 2
+        ;;
+    esac
     ;;
   ps)
     shift

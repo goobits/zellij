@@ -189,14 +189,23 @@ fi
 : > "$tmp/tabs.tsv"
 : > "$tmp/tabs.tsv.panes"
 
-naked_help="$(
+naked_output="$(
   cd "$tmp/project"
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/default-order.txt" \
     "$tmp/home/.local/bin/goob" 2>&1
 )"
-if [[ "$naked_help" != usage:$'\n'* ]]; then
-  printf 'Expected naked goob to show usage:\n%s\n' "$naked_help" >&2
+if [[ -n "$naked_output" ]]; then
+  printf 'Expected naked goob to launch default workspace quietly:\n%s\n' "$naked_output" >&2
+  exit 1
+fi
+
+default_order="$(cat "$tmp/default-order.txt")"
+expected_default_order=$'frontend\napp\nui\nscratch'
+if [[ "$default_order" != "$expected_default_order" ]]; then
+  printf 'Unexpected default workspace order:\n%s\n' "$default_order" >&2
   exit 1
 fi
 
@@ -242,6 +251,27 @@ if ! grep -Fxq 'default_workspaces=frontend backend extra now' "$profile_dir/pro
   exit 1
 fi
 
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_ORDER_ARGS="$tmp/docs-order.txt" \
+    "$tmp/home/.local/bin/goob" create docs guide api scratch >/dev/null
+)
+
+if [[ "$(cat "$profile_dir/docs.tabs")" != $'guide\napi\nscratch' ]]; then
+  printf 'Unexpected docs.tabs from create:\n%s\n' "$(cat "$profile_dir/docs.tabs")" >&2
+  exit 1
+fi
+
+docs_order="$(cat "$tmp/docs-order.txt")"
+expected_docs_order=$'docs\nguide\napi\nscratch'
+if [[ "$docs_order" != "$expected_docs_order" ]]; then
+  printf 'Unexpected docs workspace order:\n%s\n' "$docs_order" >&2
+  exit 1
+fi
+
 cat > "$profile_dir/front.tabs" <<'EOF'
 tools
 components
@@ -263,7 +293,7 @@ front_list="$(
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-    "$tmp/home/.local/bin/goob" front list
+    "$tmp/home/.local/bin/goob" tab list front
 )"
 if [[ "$front_list" != $'  0 tools\n  1 components\n  2 keyboard\n* 3 skills\n  4 scratch' ]]; then
   printf 'Unexpected front list output:\n%s\n' "$front_list" >&2
@@ -276,7 +306,7 @@ fi
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
   FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-add-order.txt" \
-    "$tmp/home/.local/bin/goob" front add search@1 >/dev/null
+    "$tmp/home/.local/bin/goob" tab add front search@1 >/dev/null
 )
 
 if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nkeyboard\nskills\nscratch' ]]; then
@@ -295,7 +325,7 @@ fi
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
   FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-move-order.txt" \
-    "$tmp/home/.local/bin/goob" front move keyboard@1 >/dev/null
+    "$tmp/home/.local/bin/goob" tab move front keyboard@1 >/dev/null
 )
 
 if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nkeyboard\nsearch\ncomponents\nskills\nscratch' ]]; then
@@ -308,7 +338,7 @@ fi
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-    "$tmp/home/.local/bin/goob" front refresh >/dev/null
+    "$tmp/home/.local/bin/goob" refresh front >/dev/null
 )
 
 if [[ "$(awk -F '\t' '{ print $4 }' "$tmp/tabs.tsv")" != $'tools 🤖\nkeyboard\nsearch\ncomponents\nskills' ]]; then
@@ -322,7 +352,7 @@ fi
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
   FAKE_ZELLIJ_ORDER_ARGS="$tmp/front-rename-order.txt" \
-    "$tmp/home/.local/bin/goob" front rename keyboard keys >/dev/null
+    "$tmp/home/.local/bin/goob" tab rename front keyboard keys >/dev/null
 )
 
 if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nkeys\nsearch\ncomponents\nskills\nscratch' ]]; then
@@ -345,7 +375,7 @@ fi
   HOME="$tmp/home" \
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
-    "$tmp/home/.local/bin/goob" front remove keys >/dev/null
+    "$tmp/home/.local/bin/goob" tab remove front keys >/dev/null
 )
 
 if [[ "$(cat "$profile_dir/front.tabs")" != $'tools\nsearch\ncomponents\nskills\nscratch' ]]; then
@@ -355,6 +385,41 @@ fi
 
 if grep -q 'keys' "$tmp/tabs.tsv"; then
   printf 'Expected keys live tab to be closed:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+  exit 1
+fi
+
+legacy_front_list="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/goob" front list
+)"
+if [[ "$legacy_front_list" != $'  0 tools\n  1 search\n* 2 components\n  3 skills' ]]; then
+  printf 'Unexpected legacy front list output:\n%s\n' "$legacy_front_list" >&2
+  exit 1
+fi
+
+cat > "$tmp/tabs.tsv" <<'EOF'
+0	0	false	tools
+1	1	true	scratch 🤖
+EOF
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+    "$tmp/home/.local/bin/zellij-new-scratch-tab"
+)
+
+if [[ "$(tail -n 1 "$tmp/tabs.tsv")" != $'2\t2\tfalse\tscratch1' ]]; then
+  printf 'Expected scratch helper to create scratch1:\n%s\n' "$(cat "$tmp/tabs.tsv")" >&2
+  exit 1
+fi
+
+if [[ ! -f "$tmp/tabs.tsv.saved" ]]; then
+  printf 'Expected scratch helper to save the session\n' >&2
   exit 1
 fi
 

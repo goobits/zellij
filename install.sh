@@ -92,7 +92,7 @@ install_zellij_binary() {
 }
 
 install_files() {
-  local executable target
+  local executable target completion_dir
   local executables=(
     zellij-saved-session-order
     zellij-live-tab-order
@@ -100,6 +100,7 @@ install_files() {
     zellij-launch-session
     zellij-open-session
     zellij-render-layout
+    zellij-new-scratch-tab
     zwork
     goob
     zellij-workspace-init
@@ -107,8 +108,11 @@ install_files() {
     zellij-agent-tab-watcher
   )
 
-  install -d "$HOME/.config/zellij" "$HOME/.local/bin" "$HOME/.local/share/zellij-workspaces/profiles"
+  completion_dir="$HOME/.local/share/zellij-workspaces/completions"
+  install -d "$HOME/.config/zellij" "$HOME/.local/bin" "$HOME/.local/share/zellij-workspaces/profiles" "$completion_dir"
   install -m 0644 "$source_dir/config.kdl" "$HOME/.config/zellij/config.kdl"
+  install -m 0644 "$source_dir/completions/_goob" "$completion_dir/_goob"
+  install -m 0644 "$source_dir/completions/goob.bash" "$completion_dir/goob.bash"
 
   for executable in "${executables[@]}"; do
     target="$executable"
@@ -132,10 +136,18 @@ if [[ -t 0 ]]; then
 fi
 
 if [[ -n "${ZSH_VERSION:-}" ]]; then
+  fpath=("$HOME/.local/share/zellij-workspaces/completions" "${fpath[@]}")
+  autoload -Uz compinit
+  compinit -i
   bindkey -M viins '^[^?' backward-kill-word 2>/dev/null
   bindkey -M viins '^[^H' backward-kill-word 2>/dev/null
   bindkey -M emacs '^[^?' backward-kill-word 2>/dev/null
   bindkey -M emacs '^[^H' backward-kill-word 2>/dev/null
+fi
+
+if [[ -n "${BASH_VERSION:-}" && -f "$HOME/.local/share/zellij-workspaces/completions/goob.bash" ]]; then
+  # shellcheck source=/dev/null
+  source "$HOME/.local/share/zellij-workspaces/completions/goob.bash"
 fi
 
 if [[ -n "${ZELLIJ:-}" ]]; then

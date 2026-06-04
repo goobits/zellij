@@ -1,0 +1,92 @@
+#compdef goob
+
+_goob_config_dir() {
+  if [[ -n "${GOOB_CONFIG_DIR:-}" && -f "$GOOB_CONFIG_DIR/profile.conf" ]]; then
+    printf '%s' "$GOOB_CONFIG_DIR"
+    return
+  fi
+
+  if [[ -f "$PWD/config/zellij/profile.conf" ]]; then
+    printf '%s' "$PWD/config/zellij"
+    return
+  fi
+
+  local default_profile="$HOME/.local/share/zellij-workspaces/default-profile"
+  if [[ -f "$default_profile" ]]; then
+    local profile_name
+    profile_name="$(sed -n '1p' "$default_profile")"
+    printf '%s/.local/share/zellij-workspaces/profiles/%s' "$HOME" "$profile_name"
+  fi
+}
+
+_goob_workspaces() {
+  local config_dir tabs_file
+  config_dir="$(_goob_config_dir)"
+  [[ -d "$config_dir" ]] || return
+
+  for tabs_file in "$config_dir"/*.tabs; do
+    [[ -f "$tabs_file" ]] || continue
+    compadd -- "$(basename "$tabs_file" .tabs)"
+  done
+}
+
+_goob_tabs() {
+  local workspace="$1" config_dir tabs_file line
+  config_dir="$(_goob_config_dir)"
+  tabs_file="$config_dir/$workspace.tabs"
+  [[ -f "$tabs_file" ]] || return
+
+  while IFS=$'\t' read -r line _cwd; do
+    [[ -n "$line" ]] && compadd -- "$line"
+  done < "$tabs_file"
+}
+
+_goob() {
+  local -a commands tab_commands
+  commands=(help install setup doctor list create refresh rename remove tab ps kill)
+  tab_commands=(list add move rename remove refresh)
+
+  case "${words[2]:-}" in
+    tab)
+      case "${words[3]:-}" in
+        "")
+          compadd -- "${tab_commands[@]}"
+          ;;
+        list|refresh)
+          [[ "$CURRENT" -eq 4 ]] && _goob_workspaces
+          ;;
+        add|move|remove)
+          if [[ "$CURRENT" -eq 4 ]]; then
+            _goob_workspaces
+          elif [[ "$CURRENT" -eq 5 ]]; then
+            _goob_tabs "${words[4]}"
+          fi
+          ;;
+        rename)
+          if [[ "$CURRENT" -eq 4 ]]; then
+            _goob_workspaces
+          elif [[ "$CURRENT" -eq 5 ]]; then
+            _goob_tabs "${words[4]}"
+          fi
+          ;;
+      esac
+      ;;
+    refresh|remove)
+      [[ "$CURRENT" -eq 3 ]] && _goob_workspaces
+      ;;
+    rename)
+      [[ "$CURRENT" -eq 3 ]] && _goob_workspaces
+      ;;
+    kill)
+      [[ "$CURRENT" -eq 3 ]] && compadd -- $(zellij list-sessions -n 2>/dev/null | awk '{ print $1 }')
+      ;;
+    *)
+      if [[ "$CURRENT" -eq 2 ]]; then
+        compadd -- "${commands[@]}"
+        _goob_workspaces
+      fi
+      ;;
+  esac
+}
+
+_goob "$@"
