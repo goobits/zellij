@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+session="${1:-}"
+shift || true
+
+if [[ -z "$session" || "$#" -eq 0 ]]; then
+  printf 'usage: zellij-session-tab-order <session> <tab-name>[<tab><cwd>]...\n' >&2
+  exit 2
+fi
+
+if [[ ! "$session" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+  printf 'zellij-session-tab-order: session names may only use letters, numbers, dot, underscore, and dash\n' >&2
+  exit 2
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+"$script_dir/zellij-saved-session-order" "$session" "$@"
+
+if [[ "${ZELLIJ_SESSION_TAB_ORDER_SAVED_ONLY:-0}" == "1" ]]; then
+  exit 0
+fi
+
+"$script_dir/zellij-live-tab-order" "$session" "$@"
+"$script_dir/zellij-saved-session-order" "$session" "$@"
