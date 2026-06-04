@@ -105,6 +105,21 @@ goob tab rename front keyboard keys
 goob refresh front
 ```
 
+### 6. Commit Queue
+
+Use one `Git` tab when multiple agents share a checkout.
+
+```bash
+goob commit setup front --tab Git
+goob commit setup front --session sketch-api --tab Git
+goob commit add "Update docs" README.md --check "pnpm test" --poke Git
+goob commit status
+goob commit poke Git
+```
+
+If you use a custom queue root, pass `--root <queue-root>` to both the producer
+and the `Git` tab command.
+
 ## 📁 How Profiles Work
 
 A profile is a directory of inert config data that `goob` reads to build your
