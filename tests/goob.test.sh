@@ -166,6 +166,19 @@ HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
 HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
   "$tmp/home/.local/bin/goob" doctor --config "$profile_dir" >/dev/null
 
+help_first_line="$(
+  HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" help 2>"$tmp/goob-help.err" | sed -n '1p'
+)"
+if [[ "$help_first_line" != 'goob: Zero-friction Zellij workspaces' ]]; then
+  printf 'Expected goob help on stdout\n' >&2
+  exit 1
+fi
+if [[ -s "$tmp/goob-help.err" ]]; then
+  printf 'Expected goob help stderr to be empty:\n%s\n' "$(cat "$tmp/goob-help.err")" >&2
+  exit 1
+fi
+
 listed="$(
   HOME="$tmp/home" PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" list --config "$profile_dir"
@@ -467,7 +480,7 @@ commit_status_output="$(
   PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
     "$tmp/home/.local/bin/goob" commit status --root "$tmp/commit-queue"
 )"
-if [[ "$commit_status_output" != $'Pending  1\nBlocked  0\nDone     0\nNext     '*"Commit queue docs"* ]]; then
+if [[ "$commit_status_output" != $'Pending  1\nUnsafe   0\nBlocked  0\nDone     0\nNext     '*"Commit queue docs"* ]]; then
   printf 'Unexpected commit status output:\n%s\n' "$commit_status_output" >&2
   exit 1
 fi
@@ -506,6 +519,18 @@ if (
 fi
 if ! grep -q 'overlap' "$tmp/commit-overlap.out"; then
   printf 'Expected overlap blocker:\n%s\n' "$(cat "$tmp/commit-overlap.out")" >&2
+  exit 1
+fi
+
+blocked_status_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit status --root "$tmp/commit-queue"
+)"
+if [[ "$blocked_status_output" != $'Pending  2\nUnsafe   1\nBlocked  0\nDone     0\nNext     blocked; run `goob commit check`' ]]; then
+  printf 'Unexpected blocked commit status output:\n%s\n' "$blocked_status_output" >&2
   exit 1
 fi
 
@@ -577,7 +602,7 @@ missing_poke_output="$(
   FAKE_ZELLIJ_SENT_KEYS="$tmp/sent-keys.txt" \
     "$tmp/home/.local/bin/goob" commit poke Missing
 )"
-if [[ "$missing_poke_output" != 'Created commit request. No live Zellij tab named Missing was found to poke.' ]]; then
+if [[ "$missing_poke_output" != 'No live Zellij tab named Missing was found to poke.' ]]; then
   printf 'Unexpected missing commit poke output:\n%s\n' "$missing_poke_output" >&2
   exit 1
 fi
@@ -618,6 +643,21 @@ if [[ "$(cat "$tmp/setup-written-chars.txt")" != 'codex' ]]; then
 fi
 if [[ "$(cat "$tmp/setup-sent-keys.txt")" != 'Enter' ]]; then
   printf 'Expected commit setup to press Enter:\n%s\n' "$(cat "$tmp/setup-sent-keys.txt")" >&2
+  exit 1
+fi
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit setup front --tab >/dev/null 2>"$tmp/setup-missing-value.err"
+); then
+  printf 'Expected commit setup --tab to reject missing value\n' >&2
+  exit 1
+fi
+if ! grep -q -- '--tab requires a value' "$tmp/setup-missing-value.err"; then
+  printf 'Expected humane setup missing value error:\n%s\n' "$(cat "$tmp/setup-missing-value.err")" >&2
   exit 1
 fi
 

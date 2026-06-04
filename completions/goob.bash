@@ -42,6 +42,28 @@ _goob_completion() {
     commit)
       if [[ "$COMP_CWORD" -eq 2 ]]; then
         COMPREPLY=( $(compgen -W "setup add status poke request next done block check list" -- "$cur") )
+      else
+        case "${COMP_WORDS[2]:-}" in
+          setup)
+            if [[ "$COMP_CWORD" -eq 3 ]]; then
+              COMPREPLY=( $(compgen -W "$(_goob_workspaces) --tab --agent --no-agent" -- "$cur") )
+            else
+              COMPREPLY=( $(compgen -W "--tab --agent --no-agent" -- "$cur") )
+            fi
+            ;;
+          add|request)
+            COMPREPLY=( $(compgen -W "--check --verify --root --summary --owner --must-contain --must-not-contain --poke" -- "$cur") )
+            ;;
+          status|check|list|next)
+            COMPREPLY=( $(compgen -W "--root" -- "$cur") )
+            ;;
+          done|block)
+            COMPREPLY=( $(compgen -W "--root --reason" -- "$cur") )
+            ;;
+          poke)
+            [[ "$COMP_CWORD" -eq 3 ]] && COMPREPLY=( $(compgen -W "Git" -- "$cur") )
+            ;;
+        esac
       fi
       ;;
     tab)

@@ -1,8 +1,0 @@
-.DS_Store
-*.log
-*.tmp
-/.tmp/
-/build/
-**/build/
-/dist/
-**/dist/

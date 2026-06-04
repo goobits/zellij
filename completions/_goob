@@ -49,9 +49,31 @@ _goob() {
 
   case "${words[2]:-}" in
     commit)
-      if [[ "$CURRENT" -eq 3 ]]; then
-        compadd -- "${commit_commands[@]}"
-      fi
+      case "${words[3]:-}" in
+        "")
+          compadd -- "${commit_commands[@]}"
+          ;;
+        setup)
+          if [[ "$CURRENT" -eq 4 ]]; then
+            compadd -- --tab --agent --no-agent
+            _goob_workspaces
+          else
+            compadd -- --tab --agent --no-agent
+          fi
+          ;;
+        add|request)
+          compadd -- --check --verify --root --summary --owner --must-contain --must-not-contain --poke
+          ;;
+        status|check|list|next)
+          compadd -- --root
+          ;;
+        done|block)
+          compadd -- --root --reason
+          ;;
+        poke)
+          [[ "$CURRENT" -eq 4 ]] && compadd -- Git
+          ;;
+      esac
       ;;
     tab)
       case "${words[3]:-}" in

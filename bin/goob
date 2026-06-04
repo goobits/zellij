@@ -5,7 +5,12 @@ command_name="${1:-}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  cat <<'EOF' >&2
+  local stream="${1:-stderr}"
+  if [[ "$stream" == "stdout" ]]; then
+    cat
+  else
+    cat >&2
+  fi <<'EOF'
 goob: Zero-friction Zellij workspaces
 
 usage:
@@ -578,23 +583,32 @@ run_commit_queue() {
 }
 
 print_commit_status() {
-  local pending done blocked next_tmp
+  local pending done blocked unsafe next_tmp check_tmp
 
   pending="$(run_commit_queue list "$@" 2>/dev/null | wc -l | tr -d ' ')"
   done="$(run_commit_queue list --state done "$@" 2>/dev/null | wc -l | tr -d ' ')"
   blocked="$(run_commit_queue list --state blocked "$@" 2>/dev/null | wc -l | tr -d ' ')"
+  check_tmp="$(mktemp)"
+  if run_commit_queue check --json "$@" >"$check_tmp" 2>/dev/null; then
+    :
+  fi
+  unsafe="$(node -e "const fs=require('fs'); const p=process.argv[1]; let n=0; try { n=(JSON.parse(fs.readFileSync(p,'utf8')).blockers||[]).length } catch {} console.log(n)" "$check_tmp")"
 
   printf 'Pending  %s\n' "$pending"
+  printf 'Unsafe   %s\n' "$unsafe"
   printf 'Blocked  %s\n' "$blocked"
   printf 'Done     %s\n' "$done"
 
   next_tmp="$(mktemp)"
-  if run_commit_queue next "$@" >"$next_tmp" 2>/dev/null; then
+  if [[ "$unsafe" == "0" ]] && run_commit_queue next "$@" >"$next_tmp" 2>/dev/null; then
     if [[ -s "$next_tmp" ]] && ! grep -Fxq 'No safe pending commit request.' "$next_tmp"; then
       printf 'Next     %s\n' "$(sed -n '1p' "$next_tmp")"
     fi
   fi
-  rm -f "$next_tmp"
+  if [[ "$unsafe" != "0" ]]; then
+    printf 'Next     blocked; run `goob commit check`\n'
+  fi
+  rm -f "$next_tmp" "$check_tmp"
 }
 
 commit_tab_id() {
@@ -617,12 +631,16 @@ commit_tab_id() {
 }
 
 send_to_commit_tab() {
-  local requested_name="${1:-Git}" message="${2:-}" session="${3:-}" tab_id
+  local requested_name="${1:-Git}" message="${2:-}" session="${3:-}" missing_message="${4:-}" tab_id
 
   validate_name tab "$requested_name"
   tab_id="$(commit_tab_id "$requested_name" "$session")"
   if [[ -z "$tab_id" ]]; then
-    printf 'Created commit request. No live Zellij tab named %s was found to poke.\n' "$requested_name"
+    if [[ -n "$missing_message" ]]; then
+      printf '%s\n' "$missing_message"
+    else
+      printf 'No live Zellij tab named %s was found to poke.\n' "$requested_name"
+    fi
     return 1
   fi
 
@@ -638,9 +656,9 @@ send_to_commit_tab() {
 }
 
 poke_commit_tab() {
-  local requested_name="${1:-Git}" session="${2:-}"
+  local requested_name="${1:-Git}" session="${2:-}" missing_message="${3:-}"
 
-  if send_to_commit_tab "$requested_name" '$x-commit next' "$session"; then
+  if send_to_commit_tab "$requested_name" '$x-commit next' "$session" "$missing_message"; then
     printf 'Poked %s with $x-commit next.\n' "$requested_name"
   fi
 }
@@ -658,10 +676,18 @@ setup_commit_tab() {
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       --tab)
+        if [[ -z "${2:-}" ]]; then
+          printf 'goob: --tab requires a value\n' >&2
+          exit 2
+        fi
         tab_name="${2:-}"
         shift 2
         ;;
       --agent)
+        if [[ -z "${2:-}" ]]; then
+          printf 'goob: --agent requires a value\n' >&2
+          exit 2
+        fi
         agent_command="${2:-}"
         shift 2
         ;;
@@ -784,7 +810,7 @@ run_commit_command() {
       fi
       run_commit_queue request "${filtered[@]}"
       if [[ "$poke" == "true" ]]; then
-        poke_commit_tab "$poke_tab"
+        poke_commit_tab "$poke_tab" "" "Created commit request. No live Zellij tab named $poke_tab was found to poke."
       fi
       ;;
     request)
@@ -1218,7 +1244,7 @@ run_launch() {
         shift 2
         ;;
       -h | --help)
-        usage
+        usage stdout
         exit 0
         ;;
       *)
@@ -1253,7 +1279,7 @@ run_launch() {
 
 case "$command_name" in
   -h | --help | help)
-    usage
+    usage stdout
     exit 0
     ;;
   "")
@@ -1263,7 +1289,7 @@ case "$command_name" in
         run_launch "$default_workspace"
       fi
     fi
-    usage
+    usage stdout
     exit 0
     ;;
   install)
