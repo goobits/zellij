@@ -3,6 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 zellij_dir="$(cd -- "$script_dir/.." && pwd)"
+repo_root="$(cd -- "$zellij_dir/../../.." && pwd)"
+commit_queue_helper="$repo_root/tasks/workspace/commitQueue.mjs"
 tmp="$(mktemp -d)"
 
 cleanup() {
@@ -106,6 +108,13 @@ if [[ "${1:-}" == "action" ]]; then
       ;;
     save-session)
       touch "${state}.saved"
+      ;;
+    write-chars)
+      printf '%s\n' "${2:-}" >> "${FAKE_ZELLIJ_WRITTEN_CHARS:?}"
+      ;;
+    send-keys)
+      shift
+      printf '%s\n' "$*" >> "${FAKE_ZELLIJ_SENT_KEYS:?}"
       ;;
   esac
   exit 0
@@ -420,6 +429,135 @@ fi
 
 if [[ ! -f "$tmp/tabs.tsv.saved" ]]; then
   printf 'Expected scratch helper to save the session\n' >&2
+  exit 1
+fi
+
+cat > "$tmp/project/README.md" <<'EOF'
+# Commit queue test
+EOF
+
+rm -rf "$tmp/commit-queue"
+commit_request_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit request \
+      --root "$tmp/commit-queue" \
+      --title "Commit queue docs" \
+      --path README.md \
+      --verify "echo ok" \
+      --must-contain "Commit queue test"
+)"
+if [[ ! -f "$commit_request_output" ]]; then
+  printf 'Expected goob commit request to write a request file:\n%s\n' "$commit_request_output" >&2
+  exit 1
+fi
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit check --root "$tmp/commit-queue" >/dev/null
+)
+
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit request \
+      --root "$tmp/commit-queue" \
+      --title "Overlapping docs" \
+      --path README.md >/dev/null
+)
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit check --root "$tmp/commit-queue" >"$tmp/commit-overlap.out" 2>&1
+); then
+  printf 'Expected goob commit check to reject overlapping paths\n' >&2
+  exit 1
+fi
+if ! grep -q 'overlap' "$tmp/commit-overlap.out"; then
+  printf 'Expected overlap blocker:\n%s\n' "$(cat "$tmp/commit-overlap.out")" >&2
+  exit 1
+fi
+
+rm -rf "$tmp/stale-queue"
+(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit request \
+      --root "$tmp/stale-queue" \
+      --title "Stale docs" \
+      --path README.md \
+      --must-not-contain "Commit queue test" >/dev/null
+)
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit check --root "$tmp/stale-queue" >"$tmp/commit-stale.out" 2>&1
+); then
+  printf 'Expected goob commit check to reject stale fingerprints\n' >&2
+  exit 1
+fi
+if ! grep -q 'fingerprint' "$tmp/commit-stale.out"; then
+  printf 'Expected fingerprint blocker:\n%s\n' "$(cat "$tmp/commit-stale.out")" >&2
+  exit 1
+fi
+
+cat > "$tmp/tabs.tsv" <<'EOF'
+0	0	true	tools
+1	1	false	Git 🤖
+EOF
+: > "$tmp/written-chars.txt"
+: > "$tmp/sent-keys.txt"
+
+poke_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit poke Git
+)"
+if [[ "$poke_output" != 'Poked Git with $x-commit next.' ]]; then
+  printf 'Unexpected commit poke output:\n%s\n' "$poke_output" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/written-chars.txt")" != '$x-commit next' ]]; then
+  printf 'Expected commit poke to write x-commit next:\n%s\n' "$(cat "$tmp/written-chars.txt")" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/sent-keys.txt")" != 'Enter' ]]; then
+  printf 'Expected commit poke to press Enter:\n%s\n' "$(cat "$tmp/sent-keys.txt")" >&2
+  exit 1
+fi
+
+missing_poke_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit poke Missing
+)"
+if [[ "$missing_poke_output" != 'Created commit request. No live Zellij tab named Missing was found to poke.' ]]; then
+  printf 'Unexpected missing commit poke output:\n%s\n' "$missing_poke_output" >&2
   exit 1
 fi
 

@@ -544,6 +544,16 @@ refresh_workspace_tabs() {
 
 commit_queue_helper() {
   local dir="$PWD"
+
+  if [[ -n "${GOOB_COMMIT_QUEUE_HELPER:-}" ]]; then
+    if [[ -f "$GOOB_COMMIT_QUEUE_HELPER" ]]; then
+      printf '%s' "$GOOB_COMMIT_QUEUE_HELPER"
+      return
+    fi
+    printf 'goob: missing GOOB_COMMIT_QUEUE_HELPER: %s\n' "$GOOB_COMMIT_QUEUE_HELPER" >&2
+    exit 1
+  fi
+
   while [[ "$dir" != "/" ]]; do
     if [[ -f "$dir/tasks/workspace/commitQueue.mjs" ]]; then
       printf '%s/tasks/workspace/commitQueue.mjs' "$dir"
