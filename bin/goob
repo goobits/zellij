@@ -40,7 +40,7 @@ commit queue:
   goob commit setup [workspace] [--tab Git] [--agent <cmd>|--no-agent]
   goob commit add <title> <path>... [--check <cmd>] [--root <dir>] [--poke [tab]]
   goob commit status [--root <dir>]
-  goob commit poke [tab]
+  goob commit poke [tab] [--root <dir>]
 
 commit queue plumbing:
   goob commit request --title <title> --path <path>... [--verify <cmd>] [--root <dir>] [--poke [tab]]
@@ -667,7 +667,7 @@ poke_commit_tab() {
   local requested_name="${1:-Git}" session="${2:-}" missing_message="${3:-}" root_value="${4:-}" message='$x-commit next'
 
   if [[ -n "$root_value" ]]; then
-    message="$message --root $root_value"
+    message="$message --root $(printf '%q' "$root_value")"
   fi
 
   if send_to_commit_tab "$requested_name" "$message" "$session" "$missing_message"; then
@@ -823,7 +823,11 @@ run_commit_command() {
       if [[ "$poke" == "true" ]]; then
         poke_commit_tab "$poke_tab" "" "Created commit request $request_id. No live Zellij tab named $poke_tab was found to poke." "$root_value"
       else
-        printf 'Run `goob commit poke %s` to wake the Git tab.\n' "$poke_tab"
+        if [[ -n "$root_value" ]]; then
+          printf 'Run `goob commit poke %s --root %q` to wake the Git tab.\n' "$poke_tab" "$root_value"
+        else
+          printf 'Run `goob commit poke %s` to wake the Git tab.\n' "$poke_tab"
+        fi
       fi
       ;;
     request)
@@ -867,12 +871,30 @@ run_commit_command() {
       run_commit_queue "$action" "$@"
       ;;
     poke)
-      if [[ "$#" -gt 1 ]]; then
-        printf 'goob: commit poke accepts at most one tab name\n' >&2
-        usage
-        exit 2
-      fi
-      poke_commit_tab "${1:-Git}"
+      while [[ "$#" -gt 0 ]]; do
+        case "$1" in
+          --root)
+            require_option_value "$1" "${2:-}"
+            root_value="${2:-}"
+            shift 2
+            ;;
+          --*)
+            printf 'goob: unknown commit poke argument %s\n' "$1" >&2
+            usage
+            exit 2
+            ;;
+          *)
+            if [[ "$poke_tab" != "Git" ]]; then
+              printf 'goob: commit poke accepts at most one tab name\n' >&2
+              usage
+              exit 2
+            fi
+            poke_tab="$1"
+            shift
+            ;;
+        esac
+      done
+      poke_commit_tab "$poke_tab" "" "" "$root_value"
       ;;
     *)
       printf 'goob: unknown commit action %s\n' "$action" >&2

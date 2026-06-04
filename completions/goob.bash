@@ -61,7 +61,7 @@ _goob_completion() {
             COMPREPLY=( $(compgen -W "--root --reason" -- "$cur") )
             ;;
           poke)
-            [[ "$COMP_CWORD" -eq 3 ]] && COMPREPLY=( $(compgen -W "Git" -- "$cur") )
+            COMPREPLY=( $(compgen -W "Git --root" -- "$cur") )
             ;;
         esac
       fi

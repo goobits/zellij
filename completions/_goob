@@ -72,7 +72,7 @@ _goob() {
           compadd -- --root --reason
           ;;
         poke)
-          [[ "$CURRENT" -eq 4 ]] && compadd -- Git
+          compadd -- Git --root
           ;;
       esac
       ;;

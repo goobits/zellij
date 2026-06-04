@@ -460,7 +460,7 @@ commit_request_output="$(
       --check "echo ok" \
       --must-contain "Commit queue test"
 )"
-if [[ "$commit_request_output" != $'Created commit request '*$'.\nRun `goob commit poke Git` to wake the Git tab.' ]]; then
+if [[ "$commit_request_output" != $'Created commit request '*$'.\nRun `goob commit poke Git --root '"$tmp/commit-queue"$'` to wake the Git tab.' ]]; then
   printf 'Unexpected goob commit add output:\n%s\n' "$commit_request_output" >&2
   exit 1
 fi
@@ -629,6 +629,40 @@ if [[ "$root_poke_output" != $'Created commit request '*$'.\nPoked Git with $x-c
 fi
 if [[ "$(cat "$tmp/written-chars.txt")" != "\$x-commit next --root $tmp/root-poke-queue" ]]; then
   printf 'Expected root poke to write rooted x-commit next:\n%s\n' "$(cat "$tmp/written-chars.txt")" >&2
+  exit 1
+fi
+
+: > "$tmp/written-chars.txt"
+: > "$tmp/sent-keys.txt"
+manual_root="$tmp/root poke queue"
+manual_root_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit add "Manual root" README.md --root "$manual_root"
+)"
+if [[ "$manual_root_output" != $'Created commit request '*$'.\nRun `goob commit poke Git --root '"$(printf '%q' "$manual_root")"$'` to wake the Git tab.' ]]; then
+  printf 'Unexpected manual rooted add output:\n%s\n' "$manual_root_output" >&2
+  exit 1
+fi
+
+manual_root_poke_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit poke Git --root "$manual_root"
+)"
+if [[ "$manual_root_poke_output" != 'Poked Git with $x-commit next --root '"$(printf '%q' "$manual_root")"'.' ]]; then
+  printf 'Unexpected manual root poke output:\n%s\n' "$manual_root_poke_output" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/written-chars.txt")" != "\$x-commit next --root $(printf '%q' "$manual_root")" ]]; then
+  printf 'Expected manual root poke to quote root:\n%s\n' "$(cat "$tmp/written-chars.txt")" >&2
   exit 1
 fi
 
