@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 zellij_dir="$(cd -- "$script_dir/.." && pwd)"
 repo_root="$(cd -- "$zellij_dir/../../.." && pwd)"
-commit_queue_helper="$repo_root/tasks/workspace/commitQueue.mjs"
+commit_queue_helper="$repo_root/tasks/workspace/commitq.mjs"
 tmp="$(mktemp -d)"
 
 cleanup() {

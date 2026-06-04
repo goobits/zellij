@@ -555,14 +555,14 @@ commit_queue_helper() {
   fi
 
   while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/tasks/workspace/commitQueue.mjs" ]]; then
-      printf '%s/tasks/workspace/commitQueue.mjs' "$dir"
+    if [[ -f "$dir/tasks/workspace/commitq.mjs" ]]; then
+      printf '%s/tasks/workspace/commitq.mjs' "$dir"
       return
     fi
     dir="$(dirname "$dir")"
   done
 
-  printf 'goob: could not find tasks/workspace/commitQueue.mjs from %s\n' "$PWD" >&2
+  printf 'goob: could not find tasks/workspace/commitq.mjs from %s\n' "$PWD" >&2
   exit 1
 }
 
