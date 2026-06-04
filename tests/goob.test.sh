@@ -460,8 +460,27 @@ commit_request_output="$(
       --check "echo ok" \
       --must-contain "Commit queue test"
 )"
-if [[ ! -f "$commit_request_output" ]]; then
-  printf 'Expected goob commit request to write a request file:\n%s\n' "$commit_request_output" >&2
+if [[ "$commit_request_output" != $'Created commit request '*$'.\nRun `goob commit poke Git` to wake the Git tab.' ]]; then
+  printf 'Unexpected goob commit add output:\n%s\n' "$commit_request_output" >&2
+  exit 1
+fi
+if [[ "$(find "$tmp/commit-queue/pending" -name '*.json' | wc -l | tr -d ' ')" != "1" ]]; then
+  printf 'Expected goob commit add to write one request file:\n%s\n' "$commit_request_output" >&2
+  exit 1
+fi
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit add "Bad flag value" README.md --summary --root "$tmp/commit-queue" >/dev/null 2>"$tmp/add-missing-value.err"
+); then
+  printf 'Expected goob commit add to reject flag-as-value\n' >&2
+  exit 1
+fi
+if ! grep -q -- '--summary requires a value' "$tmp/add-missing-value.err"; then
+  printf 'Expected humane commit add missing value error:\n%s\n' "$(cat "$tmp/add-missing-value.err")" >&2
   exit 1
 fi
 
@@ -592,6 +611,27 @@ if [[ "$(cat "$tmp/sent-keys.txt")" != 'Enter' ]]; then
   exit 1
 fi
 
+: > "$tmp/written-chars.txt"
+: > "$tmp/sent-keys.txt"
+root_poke_output="$(
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+  FAKE_ZELLIJ_TABS="$tmp/tabs.tsv" \
+  FAKE_ZELLIJ_WRITTEN_CHARS="$tmp/written-chars.txt" \
+  FAKE_ZELLIJ_SENT_KEYS="$tmp/sent-keys.txt" \
+    "$tmp/home/.local/bin/goob" commit add "Root poke" README.md --root "$tmp/root-poke-queue" --poke Git
+)"
+if [[ "$root_poke_output" != $'Created commit request '*$'.\nPoked Git with $x-commit next --root '"$tmp/root-poke-queue"$'.' ]]; then
+  printf 'Unexpected root poke output:\n%s\n' "$root_poke_output" >&2
+  exit 1
+fi
+if [[ "$(cat "$tmp/written-chars.txt")" != "\$x-commit next --root $tmp/root-poke-queue" ]]; then
+  printf 'Expected root poke to write rooted x-commit next:\n%s\n' "$(cat "$tmp/written-chars.txt")" >&2
+  exit 1
+fi
+
 missing_poke_output="$(
   cd "$tmp/project"
   HOME="$tmp/home" \
@@ -658,6 +698,21 @@ if (
 fi
 if ! grep -q -- '--tab requires a value' "$tmp/setup-missing-value.err"; then
   printf 'Expected humane setup missing value error:\n%s\n' "$(cat "$tmp/setup-missing-value.err")" >&2
+  exit 1
+fi
+
+if (
+  cd "$tmp/project"
+  HOME="$tmp/home" \
+  GOOB_COMMIT_QUEUE_HELPER="$commit_queue_helper" \
+  PATH="$tmp/fake-bin:$tmp/home/.local/bin:$PATH" \
+    "$tmp/home/.local/bin/goob" commit setup front --agent --no-agent >/dev/null 2>"$tmp/setup-flag-value.err"
+); then
+  printf 'Expected commit setup --agent to reject flag-as-value\n' >&2
+  exit 1
+fi
+if ! grep -q -- '--agent requires a value' "$tmp/setup-flag-value.err"; then
+  printf 'Expected humane setup flag-as-value error:\n%s\n' "$(cat "$tmp/setup-flag-value.err")" >&2
   exit 1
 fi
 

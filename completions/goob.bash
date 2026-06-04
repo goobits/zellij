@@ -52,7 +52,7 @@ _goob_completion() {
             fi
             ;;
           add|request)
-            COMPREPLY=( $(compgen -W "--check --verify --root --summary --owner --must-contain --must-not-contain --poke" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--check --verify --root --summary --owner --must-contain --must-not-contain --poke" -- "$cur") $(compgen -f -- "$cur") )
             ;;
           status|check|list|next)
             COMPREPLY=( $(compgen -W "--root" -- "$cur") )

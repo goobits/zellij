@@ -37,18 +37,18 @@ sessions:
   goob kill <session>
 
 commit queue:
-  goob commit setup [workspace] [--tab Git] [--agent codex|--no-agent]
-  goob commit add <title> <path>... [--check <cmd>] [--poke [tab]]
-  goob commit status
+  goob commit setup [workspace] [--tab Git] [--agent <cmd>|--no-agent]
+  goob commit add <title> <path>... [--check <cmd>] [--root <dir>] [--poke [tab]]
+  goob commit status [--root <dir>]
   goob commit poke [tab]
 
 commit queue plumbing:
-  goob commit request --title <title> --path <path>... [--verify <cmd>] [--poke [tab]]
-  goob commit next
-  goob commit done <id-or-file>
-  goob commit block <id-or-file> --reason <reason>
-  goob commit check
-  goob commit list
+  goob commit request --title <title> --path <path>... [--verify <cmd>] [--root <dir>] [--poke [tab]]
+  goob commit next [--root <dir>]
+  goob commit done <id-or-file> [--root <dir>]
+  goob commit block <id-or-file> --reason <reason> [--root <dir>]
+  goob commit check [--root <dir>]
+  goob commit list [--root <dir>]
 
 system:
   goob install
@@ -582,6 +582,14 @@ run_commit_queue() {
   node "$helper" "$@"
 }
 
+require_option_value() {
+  local option="$1" value="${2:-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    printf 'goob: %s requires a value\n' "$option" >&2
+    exit 2
+  fi
+}
+
 print_commit_status() {
   local pending done blocked unsafe next_tmp check_tmp
 
@@ -656,10 +664,14 @@ send_to_commit_tab() {
 }
 
 poke_commit_tab() {
-  local requested_name="${1:-Git}" session="${2:-}" missing_message="${3:-}"
+  local requested_name="${1:-Git}" session="${2:-}" missing_message="${3:-}" root_value="${4:-}" message='$x-commit next'
 
-  if send_to_commit_tab "$requested_name" '$x-commit next' "$session" "$missing_message"; then
-    printf 'Poked %s with $x-commit next.\n' "$requested_name"
+  if [[ -n "$root_value" ]]; then
+    message="$message --root $root_value"
+  fi
+
+  if send_to_commit_tab "$requested_name" "$message" "$session" "$missing_message"; then
+    printf 'Poked %s with %s.\n' "$requested_name" "$message"
   fi
 }
 
@@ -676,18 +688,12 @@ setup_commit_tab() {
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       --tab)
-        if [[ -z "${2:-}" ]]; then
-          printf 'goob: --tab requires a value\n' >&2
-          exit 2
-        fi
+        require_option_value "$1" "${2:-}"
         tab_name="${2:-}"
         shift 2
         ;;
       --agent)
-        if [[ -z "${2:-}" ]]; then
-          printf 'goob: --agent requires a value\n' >&2
-          exit 2
-        fi
+        require_option_value "$1" "${2:-}"
         agent_command="${2:-}"
         shift 2
         ;;
@@ -736,13 +742,16 @@ setup_commit_tab() {
       printf 'Commit tab %s is ready in %s and received `%s`.\n' "$tab_name" "$workspace" "$agent_command"
       return 0
     fi
+    printf 'Commit tab %s is ready in %s, but no live tab was found to start `%s`.\n' "$tab_name" "$workspace" "$agent_command"
+    printf 'Open the workspace, then run `goob commit poke %s`.\n' "$tab_name"
+    return 0
   fi
 
   printf 'Commit tab %s is ready in %s.\n' "$tab_name" "$workspace"
 }
 
 run_commit_command() {
-  local action="${1:-}" poke=false poke_tab="Git" filtered=() arg path_count=0
+  local action="${1:-}" poke=false poke_tab="Git" filtered=() arg path_count=0 root_value="" request_file request_id
 
   if [[ -z "$action" ]]; then
     printf 'goob: commit requires an action\n' >&2
@@ -768,18 +777,18 @@ run_commit_command() {
         arg="$1"
         case "$arg" in
           --check | --verify)
-            if [[ -z "${2:-}" ]]; then
-              printf 'goob: %s requires a value\n' "$arg" >&2
-              exit 2
-            fi
+            require_option_value "$arg" "${2:-}"
             filtered+=(--verify "${2:-}")
             shift 2
             ;;
-          --root | --summary | --owner | --must-contain | --must-not-contain)
-            if [[ -z "${2:-}" ]]; then
-              printf 'goob: %s requires a value\n' "$arg" >&2
-              exit 2
-            fi
+          --root)
+            require_option_value "$arg" "${2:-}"
+            root_value="${2:-}"
+            filtered+=("$arg" "$root_value")
+            shift 2
+            ;;
+          --summary | --owner | --must-contain | --must-not-contain)
+            require_option_value "$arg" "${2:-}"
             filtered+=("$arg" "${2:-}")
             shift 2
             ;;
@@ -808,9 +817,13 @@ run_commit_command() {
         usage
         exit 2
       fi
-      run_commit_queue request "${filtered[@]}"
+      request_file="$(run_commit_queue request "${filtered[@]}")"
+      request_id="$(basename "$request_file" .json)"
+      printf 'Created commit request %s.\n' "$request_id"
       if [[ "$poke" == "true" ]]; then
-        poke_commit_tab "$poke_tab" "" "Created commit request. No live Zellij tab named $poke_tab was found to poke."
+        poke_commit_tab "$poke_tab" "" "Created commit request $request_id. No live Zellij tab named $poke_tab was found to poke." "$root_value"
+      else
+        printf 'Run `goob commit poke %s` to wake the Git tab.\n' "$poke_tab"
       fi
       ;;
     request)
@@ -818,11 +831,14 @@ run_commit_command() {
         arg="$1"
         case "$arg" in
           --check)
-            if [[ -z "${2:-}" ]]; then
-              printf 'goob: %s requires a value\n' "$arg" >&2
-              exit 2
-            fi
+            require_option_value "$arg" "${2:-}"
             filtered+=(--verify "${2:-}")
+            shift 2
+            ;;
+          --root)
+            require_option_value "$arg" "${2:-}"
+            root_value="${2:-}"
+            filtered+=("$arg" "$root_value")
             shift 2
             ;;
           --poke)
@@ -841,7 +857,7 @@ run_commit_command() {
       done
       run_commit_queue request "${filtered[@]}"
       if [[ "$poke" == "true" ]]; then
-        poke_commit_tab "$poke_tab"
+        poke_commit_tab "$poke_tab" "" "" "$root_value"
       fi
       ;;
     status)

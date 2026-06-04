@@ -63,6 +63,7 @@ _goob() {
           ;;
         add|request)
           compadd -- --check --verify --root --summary --owner --must-contain --must-not-contain --poke
+          _files
           ;;
         status|check|list|next)
           compadd -- --root
